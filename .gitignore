@@ -1,11 +1,14 @@
 node_modules/
 dist/
-data/*.sqlite*
+data/
+docs/
+infra/
 .env
 .omo/
 .claude/
 graphify-out/
 .cloudflared/
-infra/cloudflared-named.sh
 test-results/
 playwright-report/
+playwright.config.ts
+*.spec.ts
