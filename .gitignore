@@ -1,0 +1,11 @@
+node_modules/
+dist/
+data/*.sqlite*
+.env
+.omo/
+.claude/
+graphify-out/
+.cloudflared/
+infra/cloudflared-named.sh
+test-results/
+playwright-report/

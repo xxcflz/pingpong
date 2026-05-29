@@ -1,0 +1,9 @@
+[     141ms] [ERROR] WebSocket connection to 'ws://localhost:443/?token=sJfTfOubHMkD' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5173/@vite/client:801
+[     143ms] [ERROR] [vite] failed to connect to websocket (Error: WebSocket closed without opened.).  @ http://localhost:5173/@vite/client:840
+[     149ms] Error: WebSocket closed without opened.
+    at WebSocket.<anonymous> (http://localhost:5173/@vite/client:454:22)
+[     271ms] [LOG] [main] DiscordContext ready — mock=true @ http://localhost:5173/src/main.ts:5
+[     464ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/favicon.ico:0
+[     511ms] [LOG] [main] Pixi app created 800 x 600 @ http://localhost:5173/src/main.ts:15
+[     586ms] [LOG] [spike] tick fetched: {tickRateHz: 20} @ http://localhost:5173/src/spike/HelloSquare.ts:30
+[     586ms] [LOG] [main] Spike scene loaded @ http://localhost:5173/src/main.ts:20

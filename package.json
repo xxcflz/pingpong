@@ -1,0 +1,28 @@
+{
+  "name": "pingpong-discord",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.10",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @pingpong/server run dev",
+    "build": "pnpm -r run build",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@playwright/test": "^1.60.0",
+    "socket.io-client": "^4.8.3",
+    "typescript": "^5.7.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
+  }
+}

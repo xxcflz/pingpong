@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# cloudflared-named.sh.example — Named tunnel template
+#
+# Copy this file to cloudflared-named.sh (gitignored) and fill in your values.
+# A named tunnel gives you a stable URL across restarts instead of a random
+# quick-tunnel URL. Useful for repeated dev sessions or sharing with teammates.
+#
+# Setup:
+#   1. cloudflared tunnel login           (one-time browser auth)
+#   2. cloudflared tunnel create pingpong (creates the tunnel, outputs TUNNEL_UUID)
+#   3. cp infra/cloudflared-named.sh.example infra/cloudflared-named.sh
+#   4. Fill in TUNNEL_UUID and TUNNEL_HOSTNAME below
+#   5. bash infra/cloudflared-named.sh
+#
+# DNS:
+#   cloudflared tunnel route dns pingpong dev-pingpong.yourdomain.com
+#
+# Requires: cloudflared, authenticated with `cloudflared tunnel login`
+
+set -euo pipefail
+
+# --- Fill these in ---
+TUNNEL_UUID=""            # From `cloudflared tunnel create pingpong` output
+TUNNEL_HOSTNAME=""        # e.g. dev-pingpong.yourdomain.com
+# ----------------------
+
+PORT="${VITE_PORT:-5173}"
+
+if [[ -z "${TUNNEL_UUID}" || -z "${TUNNEL_HOSTNAME}" ]]; then
+  echo "ERROR: Set TUNNEL_UUID and TUNNEL_HOSTNAME in this script first."
+  echo "See comments at top of file for setup steps."
+  exit 1
+fi
+
+echo ">> Named tunnel: ${TUNNEL_HOSTNAME} → http://localhost:${PORT}"
+echo ">> Tunnel UUID:   ${TUNNEL_UUID}"
+echo ""
+
+exec cloudflared tunnel --url "http://localhost:${PORT}" run "${TUNNEL_UUID}"

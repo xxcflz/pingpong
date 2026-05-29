@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ping Pong — Discord Activity</title>
+  <style>
+    :root {
+      --discord-safe-area-top: env(titlebar-area-height, 0px);
+      --discord-safe-area-left: env(titlebar-area-x, 0px);
+      --discord-safe-area-right: 0px;
+      --discord-safe-area-bottom: 0px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #1a1a2e;
+    }
+
+    #game {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="debug-inline" style="position:fixed;top:10px;left:10px;color:#ff0000;font:bold 14px monospace;z-index:9999;background:#000000aa;padding:10px;border-radius:4px;">LOADING (JS not started)</div>
+  <canvas id="game"></canvas>
+  <script>
+    document.getElementById('debug-inline').textContent = 'JS started — waiting for main.ts...';
+  </script>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
