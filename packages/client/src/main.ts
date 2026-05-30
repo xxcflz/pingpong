@@ -56,18 +56,23 @@ async function main(): Promise<void> {
   if (!canvas) throw new Error("Missing #game canvas element");
   const app = await createApp(canvas);
 
-  const selection = await new Promise<{ color: number; mode: "online" | "ai" }>((resolve) => {
-    const landing = new LandingPage(app, {
-      onPlayOnline: (color) => {
-        landing.destroy();
-        resolve({ color, mode: "online" });
-      },
-      onPlayAi: (color) => {
-        landing.destroy();
-        resolve({ color, mode: "ai" });
-      },
-    });
-  });
+  const params = new URLSearchParams(window.location.search);
+  const isTestMode = params.has("test_user_id") || params.has("test_input") || params.has("scene_test");
+
+  const selection = isTestMode
+    ? { color: 0x4dd2ff, mode: "online" as const }
+    : await new Promise<{ color: number; mode: "online" | "ai" }>((resolve) => {
+        const landing = new LandingPage(app, {
+          onPlayOnline: (color) => {
+            landing.destroy();
+            resolve({ color, mode: "online" });
+          },
+          onPlayAi: (color) => {
+            landing.destroy();
+            resolve({ color, mode: "ai" });
+          },
+        });
+      });
 
   const stateRef: { current: MatchState } = { current: createStubState() };
   const scene = new PongScene(app, () => stateRef.current, selection.color);
@@ -87,4 +92,5 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
+  console.error('Failed to start game:', err);
 });

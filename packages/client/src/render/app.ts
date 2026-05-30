@@ -12,9 +12,11 @@ export async function createApp(canvas: HTMLCanvasElement): Promise<Application>
     canvas,
     resolution: window.devicePixelRatio ?? 1,
     autoDensity: true,
-    backgroundAlpha: 0,
+    backgroundAlpha: 1,
+    backgroundColor: 0x0b0f17,
     antialias: true,
     resizeTo: window,
+    clearBeforeRender: true,
   });
 
   return app;
