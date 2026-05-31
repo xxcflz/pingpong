@@ -1,4 +1,4 @@
-import type { MatchState } from '@pingpong/shared';
+import type { AiDifficulty, MatchState } from '@pingpong/shared';
 import {
   BALL_RADIUS,
   COURT_HEIGHT,
@@ -7,6 +7,7 @@ import {
   PADDLE_WIDTH,
 } from '@pingpong/shared';
 import type { Application, Container } from 'pixi.js';
+import { sound } from './audio/sound';
 import { SERVER_HOST } from './env';
 import { MatchOrchestrator } from './match/orchestrator';
 import { createApp } from './render/app';
@@ -95,16 +96,22 @@ async function main(): Promise<void> {
     params.has('test_user_id') || params.has('test_input') || params.has('scene_test');
 
   const selection = isTestMode
-    ? { color: 0x4dd2ff, mode: 'online' as const }
-    : await new Promise<{ color: number; mode: 'online' | 'ai' }>((resolve) => {
+    ? { color: 0x4dd2ff, mode: 'online' as const, difficulty: 'medium' as const }
+    : await new Promise<{
+        color: number;
+        mode: 'online' | 'ai';
+        difficulty: AiDifficulty;
+      }>((resolve) => {
         const landing = new LandingPage(app, {
           onPlayOnline: (color) => {
+            sound.unlock(); // first user gesture — required to start AudioContext
             landing.destroy();
-            resolve({ color, mode: 'online' });
+            resolve({ color, mode: 'online', difficulty: 'medium' });
           },
-          onPlayAi: (color) => {
+          onPlayAi: (color, difficulty) => {
+            sound.unlock();
             landing.destroy();
-            resolve({ color, mode: 'ai' });
+            resolve({ color, mode: 'ai', difficulty });
           },
         });
       });
@@ -124,6 +131,7 @@ async function main(): Promise<void> {
     stateRef,
     selectedMode: selection.mode,
     userColor: selection.color,
+    aiDifficulty: selection.difficulty,
   });
 
   // Wire up leave button to show pause menu

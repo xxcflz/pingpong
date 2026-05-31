@@ -1,5 +1,12 @@
-import { COURT_HEIGHT, COURT_WIDTH, PADDLE_HEIGHT, PADDLE_WIDTH } from '@pingpong/shared';
+import {
+  type AiDifficulty,
+  COURT_HEIGHT,
+  COURT_WIDTH,
+  PADDLE_HEIGHT,
+  PADDLE_WIDTH,
+} from '@pingpong/shared';
 import { type Application, Container, Graphics, Text } from 'pixi.js';
+import { sound } from '../audio/sound';
 
 export const PADDLE_COLORS = [
   { color: 0x4dd2ff, name: 'Cyan' },
@@ -19,8 +26,14 @@ const ACCENT_GREEN = 0x5eea8a;
 
 export interface LandingPageCallbacks {
   onPlayOnline: (color: number) => void;
-  onPlayAi: (color: number) => void;
+  onPlayAi: (color: number, difficulty: AiDifficulty) => void;
 }
+
+const AI_DIFFICULTIES: ReadonlyArray<{ value: AiDifficulty; label: string }> = [
+  { value: 'easy', label: 'EASY' },
+  { value: 'medium', label: 'MEDIUM' },
+  { value: 'hard', label: 'HARD' },
+];
 
 export class LandingPage {
   private readonly app: Application;
@@ -28,6 +41,8 @@ export class LandingPage {
   private readonly container: Container;
   private selectedColor: number = PADDLE_COLORS[0]?.color;
   private selectedIndex = 0;
+  private selectedDifficulty: AiDifficulty = 'medium';
+  private readonly difficultyChips: { bg: Graphics; label: Text; value: AiDifficulty }[] = [];
   private readonly swatches: { bg: Graphics; ring: Graphics }[] = [];
   private readonly previewPaddle: Graphics;
   private readonly previewGlow: Graphics;
@@ -50,8 +65,9 @@ export class LandingPage {
     this.previewPaddle = preview.paddle;
     this.previewGlow = preview.glow;
     this.previewBall = preview.ball;
-    this.buildControlsGuide();
+    this.buildDifficultySelector();
     this.buildPlayButtons(callbacks);
+    this.buildMuteToggle();
 
     this.root.addChild(this.container);
     app.stage.addChild(this.root);
@@ -311,18 +327,18 @@ export class LandingPage {
     return { paddle, glow, ball };
   }
 
-  // ── Controls guide ──────────────────────────────────────────────────────
+  // ── Difficulty selector (AI bot) ──────────────────────────────────────────
 
-  private buildControlsGuide(): void {
-    const cy = 760;
+  private buildDifficultySelector(): void {
+    const cy = 940;
 
     const header = new Text({
-      text: 'HOW TO PLAY',
+      text: 'AI DIFFICULTY',
       style: {
         fontFamily: FONT,
-        fontSize: 18,
+        fontSize: 14,
         fill: TEXT_DIM,
-        letterSpacing: 4,
+        letterSpacing: 3,
         fontWeight: 'bold',
       },
     });
@@ -331,70 +347,76 @@ export class LandingPage {
     header.y = cy;
     this.container.addChild(header);
 
-    const controls: Array<{ draw: (g: Graphics) => void; text: string }> = [
-      {
-        draw: (g) => {
-          // Drag icon: finger trail
-          g.circle(-18, 0, 5).fill({ color: ACCENT_BLUE, alpha: 0.4 });
-          g.circle(-8, 0, 6).fill({ color: ACCENT_BLUE, alpha: 0.7 });
-          g.circle(4, 0, 7).fill(ACCENT_BLUE);
-          g.moveTo(14, 0).lineTo(22, 0).stroke({ color: ACCENT_BLUE, width: 2 });
-          g.moveTo(18, -4).lineTo(22, 0).lineTo(18, 4).stroke({ color: ACCENT_BLUE, width: 2 });
-        },
-        text: 'Drag to move paddle',
-      },
-      {
-        draw: (g) => {
-          // Flick icon: curved arrow
-          g.arc(0, 4, 14, -Math.PI * 0.8, -Math.PI * 0.2, false).stroke({
-            color: 0xffd700,
-            width: 2,
-          });
-          g.moveTo(10, -4).lineTo(14, -10).lineTo(6, -10).fill(0xffd700);
-        },
-        text: 'Flick for spin effect',
-      },
-      {
-        draw: (g) => {
-          // Release icon: open hand (circle with gap)
-          g.circle(0, 0, 10).stroke({ color: 0x5eea8a, width: 2 });
-          g.circle(0, 0, 3).fill(0x5eea8a);
-        },
-        text: 'Release to stop',
-      },
-    ];
+    const chipW = 96;
+    const chipH = 32;
+    const gap = 12;
+    const total = AI_DIFFICULTIES.length * chipW + (AI_DIFFICULTIES.length - 1) * gap;
+    const startX = (COURT_WIDTH - total) / 2;
+    const y = cy + 20;
 
-    const iconX = COURT_WIDTH / 2 - 140;
-    const textX = COURT_WIDTH / 2 - 100;
-    const startY = cy + 50;
-    const rowH = 58;
-
-    controls.forEach((c, i) => {
-      const y = startY + i * rowH;
-
-      const iconBox = new Graphics()
-        .roundRect(iconX - 28, y - 20, 56, 40, 8)
-        .fill({ color: 0xffffff, alpha: 0.04 });
-      this.container.addChild(iconBox);
-
-      const icon = new Graphics();
-      icon.x = iconX;
-      icon.y = y;
-      c.draw(icon);
-      this.container.addChild(icon);
+    AI_DIFFICULTIES.forEach((d, i) => {
+      const cx = startX + i * (chipW + gap);
+      const bg = new Graphics().roundRect(cx, y, chipW, chipH, 8).fill(ACCENT_GREEN);
+      bg.eventMode = 'static';
+      bg.cursor = 'pointer';
+      bg.on('pointertap', () => this.updateDifficulty(d.value));
+      this.container.addChild(bg);
 
       const label = new Text({
-        text: c.text,
+        text: d.label,
         style: {
           fontFamily: FONT,
-          fontSize: 18,
-          fill: TEXT_WHITE,
+          fontSize: 14,
+          fill: BG_DARK,
+          fontWeight: 'bold',
+          letterSpacing: 1,
         },
       });
-      label.anchor.set(0, 0.5);
-      label.x = textX;
-      label.y = y;
+      label.anchor.set(0.5);
+      label.x = cx + chipW / 2;
+      label.y = y + chipH / 2;
       this.container.addChild(label);
+
+      this.difficultyChips.push({ bg, label, value: d.value });
+    });
+
+    this.updateDifficulty(this.selectedDifficulty);
+  }
+
+  private updateDifficulty(value: AiDifficulty): void {
+    this.selectedDifficulty = value;
+    for (const chip of this.difficultyChips) {
+      const selected = chip.value === value;
+      chip.bg.alpha = selected ? 1 : 0.3;
+    }
+  }
+
+  // ── Mute toggle ───────────────────────────────────────────────────────────
+
+  private buildMuteToggle(): void {
+    const size = 40;
+    const x = COURT_WIDTH - size - 20;
+    const y = 20;
+
+    const bg = new Graphics().roundRect(x, y, size, size, 8).fill({ color: 0xffffff, alpha: 0.06 });
+    bg.eventMode = 'static';
+    bg.cursor = 'pointer';
+    this.container.addChild(bg);
+
+    const icon = new Text({
+      text: sound.isMuted() ? '🔇' : '🔊',
+      style: { fontFamily: FONT, fontSize: 20, fill: TEXT_WHITE },
+    });
+    icon.anchor.set(0.5);
+    icon.x = x + size / 2;
+    icon.y = y + size / 2;
+    this.container.addChild(icon);
+
+    bg.on('pointertap', () => {
+      // Tapping is a user gesture — safe to unlock the AudioContext here too.
+      sound.unlock();
+      const muted = sound.toggleMuted();
+      icon.text = muted ? '🔇' : '🔊';
     });
   }
 
@@ -403,8 +425,8 @@ export class LandingPage {
   private buildPlayButtons(callbacks: LandingPageCallbacks): void {
     const btnW = 320;
     const btnH = 64;
-    const y1 = 1000;
-    const y2 = 1085;
+    const y1 = 1010;
+    const y2 = 1090;
 
     this.container.addChild(
       this.buildButton({
@@ -426,7 +448,7 @@ export class LandingPage {
         w: btnW,
         h: btnH,
         color: ACCENT_GREEN,
-        onTap: () => callbacks.onPlayAi(this.selectedColor),
+        onTap: () => callbacks.onPlayAi(this.selectedColor, this.selectedDifficulty),
       }),
     );
 

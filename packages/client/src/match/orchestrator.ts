@@ -1,5 +1,7 @@
 import {
+  type AiDifficulty,
   BALL_RADIUS,
+  BALL_SPEED_MAX,
   COURT_HEIGHT,
   COURT_WIDTH,
   type MatchState,
@@ -30,6 +32,7 @@ import { type Application, Container, Graphics, Text } from 'pixi.js';
  * reacts to server events, never invents phases.
  */
 import { type Socket, io } from 'socket.io-client';
+import { sound } from '../audio/sound';
 import { SOCKET_TRANSPORT } from '../env';
 import { type DragController, createDragHandler } from '../input/drag';
 import { type BallPredictionEngine, createBallPredictionEngine } from '../net/ballPrediction';
@@ -58,6 +61,8 @@ export interface MatchOrchestratorDeps {
   selectedMode?: 'online' | 'ai';
   /** Paddle color chosen on the landing page. */
   userColor: number;
+  /** AI difficulty chosen on the landing page (only used when mode is 'ai'). */
+  aiDifficulty?: AiDifficulty;
 }
 
 declare global {
@@ -92,6 +97,7 @@ export class MatchOrchestrator {
   private readonly stateRef: { current: MatchState };
   private selectedMode?: 'online' | 'ai';
   private readonly userColor: number;
+  private readonly aiDifficulty: AiDifficulty;
 
   // Network
   private socket: Socket | null = null;
@@ -125,6 +131,9 @@ export class MatchOrchestrator {
   // Ready button (Pixi overlay)
   private readyOverlay: Container | null = null;
 
+  // Invite button (Pixi overlay, lobby only)
+  private inviteOverlay: Container | null = null;
+
   // Lobby heartbeat
   private lobbyHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -136,6 +145,12 @@ export class MatchOrchestrator {
   // Ticker binding ref
   private readonly boundTick: (ticker: { deltaMS: number }) => void;
 
+  // Last server rally count — a rise signals a paddle hit (for SFX).
+  private lastRallyCount = 0;
+
+  // Opponent display name — captured at match start for rich-presence updates.
+  private opponentName = 'opponent';
+
   constructor(deps: MatchOrchestratorDeps) {
     this.serverHost = deps.serverHost;
     this.app = deps.app;
@@ -144,6 +159,7 @@ export class MatchOrchestrator {
     this.stateRef = deps.stateRef;
     this.selectedMode = deps.selectedMode;
     this.userColor = deps.userColor;
+    this.aiDifficulty = deps.aiDifficulty ?? 'medium';
 
     this.setState(this.createStubState());
     this.boundTick = this.onTick.bind(this);
@@ -394,14 +410,24 @@ export class MatchOrchestrator {
       }
       this.loadHistory();
       if (this.role === 'player' && !this.mySlot && !this.selectedMode) this.showReadyButton();
+      // An online lobby with an empty opponent slot is the moment to invite a
+      // friend. AI matches and full lobbies don't need it.
+      const oppFilled = !!slots.top && !!slots.bottom;
+      if (this.selectedMode !== 'ai' && !oppFilled) {
+        this.showInviteButton();
+      } else {
+        this.hideInviteButton();
+      }
     } else if (phase === 'countdown') {
       this.scene.setPhase('countdown');
       this.scene.showLeaveButton();
       this.hideReadyButton();
+      this.hideInviteButton();
     } else if (phase === 'playing') {
       this.scene.setPhase('playing');
       this.scene.showLeaveButton();
       this.hideReadyButton();
+      this.hideInviteButton();
     }
   }
 
@@ -600,7 +626,7 @@ export class MatchOrchestrator {
       color: 0x5e_ea_8a,
       onTap: () => {
         if (!this.socket?.connected) return;
-        this.socket.emit('playAi');
+        this.socket.emit('playAi', { difficulty: this.aiDifficulty });
         this.hideReadyButton();
       },
     });
@@ -653,13 +679,65 @@ export class MatchOrchestrator {
     }
   }
 
+  // ── Invite button (Discord, lobby only) ───────────────────────────────────
+
+  /**
+   * Show a "Invite a friend" button in the online lobby. Opens Discord's native
+   * invite dialog. No-op in mock mode (DiscordContext.openInviteDialog returns
+   * false), so the button simply doesn't appear outside a real Activity.
+   */
+  private showInviteButton(): void {
+    if (this.inviteOverlay || this.ctx.isMock) return;
+
+    const overlay = new Container();
+    overlay.label = 'inviteOverlay';
+
+    const btnW = 300;
+    const btnH = 56;
+    const btnX = (COURT_WIDTH - btnW) / 2;
+    const btnY = COURT_HEIGHT / 2 + 140;
+
+    const bg = new Graphics().roundRect(btnX, btnY, btnW, btnH, 12).fill(0x5865_f2); // Discord blurple
+    bg.eventMode = 'static';
+    bg.cursor = 'pointer';
+    overlay.addChild(bg);
+
+    const label = new Text({
+      text: '+ Invite a friend',
+      style: {
+        fontFamily: "'Courier New', Courier, monospace",
+        fontSize: 24,
+        fill: 0xff_ff_ff,
+        fontWeight: 'bold',
+      },
+    });
+    label.anchor.set(0.5);
+    label.x = COURT_WIDTH / 2;
+    label.y = btnY + btnH / 2;
+    overlay.addChild(label);
+
+    bg.on('pointertap', () => {
+      void this.ctx.openInviteDialog();
+    });
+
+    this.scene.getLayers().uiLayer.addChild(overlay);
+    this.inviteOverlay = overlay;
+  }
+
+  private hideInviteButton(): void {
+    if (this.inviteOverlay) {
+      this.inviteOverlay.destroy({ children: true });
+      this.inviteOverlay = null;
+    }
+  }
+
   /** Auto-emit the mode chosen on the landing page, skipping the in-game overlay. */
   private emitSelectedMode(): void {
     if (!this.socket?.connected || !this.selectedMode) return;
     if (this.selectedMode === 'online') {
       this.socket.emit('readyToggle');
     } else {
-      this.socket.emit('playAi');
+      this.socket.emit('playAi', { difficulty: this.aiDifficulty });
       this.scene.setPhase('countdown');
       this.scene.setCountdown(3);
     }
@@ -705,6 +783,7 @@ export class MatchOrchestrator {
     this.currentPhase = 'playing';
     this.scene.setPhase('playing');
     this.scene.setCountdown(0);
+    this.lastRallyCount = 0;
 
     // Determine my slot from match start data
     if (this.myUserId) {
@@ -750,6 +829,11 @@ export class MatchOrchestrator {
       opponentPrediction: !!this.opponentPrediction,
       mySlot: this.mySlot,
     });
+
+    // Discord rich presence: capture opponent name and show the initial score.
+    const opponent = this.mySlot === 'top' ? data.players.bottom : data.players.top;
+    this.opponentName = opponent?.username ?? 'opponent';
+    void this.ctx.setActivity(`vs ${this.opponentName}`, '0 - 0');
   }
 
   private setupDragHandler(): void {
@@ -824,8 +908,13 @@ export class MatchOrchestrator {
       serverTimeMs: Date.now(),
     };
 
-    // Update rally count
-    this.scene.setRallyCount(data.rallyCount);
+    // Paddle-hit SFX: the server's rallyCount increments by one on every
+    // paddle contact, so a rise is the authoritative "hit" signal. Pitch
+    // scales with ball speed for mounting rally tension.
+    if (data.rallyCount > this.lastRallyCount) {
+      sound.paddleHit(data.ballSpeed / BALL_SPEED_MAX);
+    }
+    this.lastRallyCount = data.rallyCount;
   }
 
   // ── Tick (Pixi ticker) ────────────────────────────────────────────────────
@@ -900,7 +989,18 @@ export class MatchOrchestrator {
 
   private onScore(data: ServerScoreEvent): void {
     this.scene.flashScore(data.side);
-    this.scene.setRallyCount(0);
+    this.lastRallyCount = 0;
+
+    // Score SFX: ascending tone if I scored, descending if I conceded.
+    sound.score(data.side === this.mySlot);
+
+    // Update Discord rich presence with the live score from my perspective.
+    if (this.mySlot) {
+      const opponentSlot: PlayerSlot = this.mySlot === 'top' ? 'bottom' : 'top';
+      const mine = data.score[this.mySlot];
+      const theirs = data.score[opponentSlot];
+      void this.ctx.setActivity(`vs ${this.opponentName}`, `${mine} - ${theirs}`);
+    }
 
     // Reset ball prediction — server will send the new ball state in the next snapshot
     if (this.ballPrediction) {
@@ -1138,6 +1238,7 @@ export class MatchOrchestrator {
 
   destroy(): void {
     this.hideReadyButton();
+    this.hideInviteButton();
     this.stopLobbyHeartbeat();
     this.drag?.disable();
     this.app.ticker.remove(this.boundTick);

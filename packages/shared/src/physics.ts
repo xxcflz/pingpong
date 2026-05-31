@@ -101,12 +101,17 @@ export function collidePaddleAabb(ball: BallState, paddle: PaddleState): boolean
 }
 
 /**
- * Reflect ball off court walls (left, right, top).
- * Bottom wall is not checked — that's a scoring event handled by the server.
- * Returns a NEW ball with velocity reflected where appropriate.
+ * Reflect ball off the side walls (left, right) only.
+ *
+ * Top and bottom are GOAL LINES, not walls — the ball must pass through them
+ * to score (handled in the server's scoring step). Reflecting off the top
+ * here would bounce the ball back before it could ever cross the top goal,
+ * making the top player's opponent unable to score.
+ *
+ * Returns a NEW ball with horizontal velocity reflected where appropriate.
  */
 export function collideWalls(ball: BallState): BallState {
-  let { x, y } = ball.vel;
+  let { x } = ball.vel;
 
   // Left wall
   if (ball.pos.x - ball.radius <= 0) {
@@ -116,12 +121,8 @@ export function collideWalls(ball: BallState): BallState {
   if (ball.pos.x + ball.radius >= COURT_WIDTH) {
     x = -Math.abs(x);
   }
-  // Top wall
-  if (ball.pos.y - ball.radius <= 0) {
-    y = Math.abs(y);
-  }
 
-  return { ...ball, vel: vec2(x, y) };
+  return { ...ball, vel: vec2(x, ball.vel.y) };
 }
 
 /**

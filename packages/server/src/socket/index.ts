@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 import type {
+  AiDifficulty,
   CountdownTickMessage,
   LobbyUpdateMessage,
   MatchStartMessage,
@@ -288,8 +289,10 @@ export function attachSocket(httpServer: HttpServer, clientOrigin: string): Serv
       lobby.readyToggle(user.id, socket.id);
     });
 
-    socket.on('playAi', () => {
-      lobby.startAiMatch(user.id, socket.id);
+    socket.on('playAi', (data?: { difficulty?: AiDifficulty }) => {
+      const difficulty: AiDifficulty =
+        data?.difficulty === 'easy' || data?.difficulty === 'hard' ? data.difficulty : 'medium';
+      lobby.startAiMatch(user.id, socket.id, difficulty);
     });
 
     socket.on('setPaddleColor', (data: { color: number }) => {

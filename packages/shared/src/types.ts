@@ -16,6 +16,9 @@ export interface Vec2 {
 /** Which end of the court a player occupies. */
 export type PlayerSlot = 'top' | 'bottom';
 
+/** AI opponent difficulty. Tunes the server-side bot's reaction and speed. */
+export type AiDifficulty = 'easy' | 'medium' | 'hard';
+
 // ── Match lifecycle ──────────────────────────────────────────────────────────
 
 /** High-level phase of a match. */

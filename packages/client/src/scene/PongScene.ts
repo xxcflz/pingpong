@@ -28,7 +28,6 @@ import {
   hideAfk,
   setAfkPulse,
   setBanner,
-  setRally,
   setScores,
   setSpeedGauge,
   showAfk,
@@ -73,7 +72,6 @@ export class PongScene {
 
   // Internal state
   private role: Role = 'player';
-  private rally = 0;
   private flashSide: 'top' | 'bottom' | null = null;
   private flashStart = 0;
   private countdownN = 0;
@@ -163,7 +161,6 @@ export class PongScene {
 
     // HUD
     setScores(this.hud, state.score.top, state.score.bottom);
-    setRally(this.hud, this.rally);
     const ballSpeed = Math.hypot(state.ball.vel.x, state.ball.vel.y);
     setSpeedGauge(this.hud, ballSpeed);
 
@@ -271,11 +268,6 @@ export class PongScene {
   /** Set pre-serve countdown number (3, 2, 1). Pass 0 to clear. */
   setCountdown(n: number): void {
     this.countdownN = n;
-  }
-
-  /** Set rally count (consecutive hits without score). */
-  setRallyCount(n: number): void {
-    this.rally = n;
   }
 
   /** Trigger a score flash on the given side. */

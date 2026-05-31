@@ -13,7 +13,7 @@ import {
   SCORE_TO_WIN,
   TICK_RATE_HZ,
 } from '@pingpong/shared';
-import type { PlayerSlot } from '@pingpong/shared';
+import type { AiDifficulty, PlayerSlot } from '@pingpong/shared';
 import { afkTracker } from '../lobby/afk.js';
 import { AI_USER_ID, lobby } from '../lobby/state.js';
 import { getIO } from '../socket/index.js';
@@ -35,6 +35,8 @@ export function startLoop(room: Room): void {
     room.loopTimer = null;
     log.info('[loop] cleared stale timer before restart');
   }
+
+  resetAiState();
 
   let expectedTickAt = performance.now() + INTERVAL_MS;
 
@@ -90,6 +92,33 @@ export function startLoop(room: Room): void {
   log.info(`[loop] started at ${TICK_RATE_HZ} Hz (interval=${INTERVAL_MS.toFixed(3)}ms)`);
 }
 
+/**
+ * Per-difficulty AI bot tuning.
+ *   lead   — seconds of ball-velocity lookahead (higher = better anticipation)
+ *   speed  — fraction of PADDLE_MAX_SPEED the bot may move per tick
+ *   error  — peak persistent aim offset in px, rolled once per approach.
+ *            Must exceed the catch radius (PADDLE_WIDTH/2 + ball radius ≈ 80px)
+ *            often enough that easier bots genuinely miss. A whiff needs
+ *            |error| > ~80px, so easy rolls in a wide band, hard never errs.
+ */
+const AI_TUNING: Record<AiDifficulty, { lead: number; speed: number; error: number }> = {
+  easy: { lead: 0.05, speed: 0.55, error: 160 },
+  medium: { lead: 0.16, speed: 0.78, error: 70 },
+  hard: { lead: 0.26, speed: 0.96, error: 0 },
+};
+
+// ── AI per-approach state ─────────────────────────────────────────────────
+// A single global room means a single AI; module-level state matches the
+// existing singleton pattern. resetAiState() is called from startLoop.
+let aiAimError = 0;
+let aiApproaching = false;
+
+/** Reset AI aiming state at the start of each match. */
+export function resetAiState(): void {
+  aiAimError = 0;
+  aiApproaching = false;
+}
+
 function driveAiPaddle(room: Room, dt: number): void {
   if (room.state.phase !== 'playing') return;
 
@@ -98,13 +127,30 @@ function driveAiPaddle(room: Room, dt: number): void {
     slots.top === AI_USER_ID ? 'top' : slots.bottom === AI_USER_ID ? 'bottom' : null;
   if (!aiSlot) return;
 
+  const tuning = AI_TUNING[lobby.getAiDifficulty()];
   const paddle = room.state.paddles[aiSlot];
-  const leadX = room.state.ball.pos.x + room.state.ball.vel.x * 0.18;
+  const ball = room.state.ball;
   const minX = PADDLE_WIDTH / 2;
   const maxX = COURT_WIDTH - PADDLE_WIDTH / 2;
-  const targetX = Math.max(minX, Math.min(maxX, leadX));
+  const maxStep = PADDLE_MAX_SPEED * dt * tuning.speed;
+
+  // Is the ball heading toward the AI's end?
+  const approaching = aiSlot === 'top' ? ball.vel.y < 0 : ball.vel.y > 0;
+
+  // Roll ONE aim error when a fresh approach begins. Holding it for the whole
+  // approach is what makes the paddle actually arrive at the wrong spot —
+  // re-rolling every tick averaged out to a perfect interception.
+  if (approaching && !aiApproaching) {
+    aiAimError = tuning.error > 0 ? (Math.random() * 2 - 1) * tuning.error : 0;
+  }
+  aiApproaching = approaching;
+
+  // Target: intercept with persistent error while the ball approaches;
+  // otherwise drift back toward center so the bot isn't permanently camped on
+  // the ball (gives the player an opening on slower difficulties).
+  const target = approaching ? ball.pos.x + ball.vel.x * tuning.lead + aiAimError : COURT_WIDTH / 2;
+  const targetX = Math.max(minX, Math.min(maxX, target));
   const dx = targetX - paddle.pos.x;
-  const maxStep = PADDLE_MAX_SPEED * dt * 0.72;
   const nextX = paddle.pos.x + Math.max(-maxStep, Math.min(maxStep, dx));
 
   room.pushInput(aiSlot, { paddleX: nextX, seq: room.state.tick });

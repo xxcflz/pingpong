@@ -8,6 +8,13 @@ import { DISCORD_CLIENT_ID, SERVER_HOST } from '../env';
 
 const DISCORD_PROXY_PREFIXES = ['/api', '/ws', '/spectate'] as const;
 
+/** A Discord user connected to the current Activity instance. */
+export interface ParticipantSummary {
+  id: string;
+  name: string;
+  avatar: string | null;
+}
+
 export class DiscordContext {
   /** Internal flag — true once patchUrlMappings has run. */
   private _patched = false;
@@ -36,6 +43,56 @@ export class DiscordContext {
    */
   get instanceId(): string {
     return this.sdk.instanceId;
+  }
+
+  /**
+   * Open the native Discord invite dialog so the user can pull a friend into
+   * this Activity. No-op in mock mode (no real Discord client to host it).
+   * Returns true if the dialog was shown.
+   */
+  async openInviteDialog(): Promise<boolean> {
+    if (this.isMock) return false;
+    try {
+      await this.sdk.commands.openInviteDialog();
+      return true;
+    } catch (err) {
+      console.warn('[discord] openInviteDialog failed', err);
+      return false;
+    }
+  }
+
+  /**
+   * Fetch the Discord users currently connected to this Activity instance.
+   * Returns an empty list in mock mode or on failure.
+   */
+  async getConnectedParticipants(): Promise<ParticipantSummary[]> {
+    if (this.isMock) return [];
+    try {
+      const res = await this.sdk.commands.getInstanceConnectedParticipants();
+      return (res.participants ?? []).map((p) => ({
+        id: p.id,
+        name: p.global_name ?? p.username,
+        avatar: p.avatar ?? null,
+      }));
+    } catch (err) {
+      console.warn('[discord] getInstanceConnectedParticipants failed', err);
+      return [];
+    }
+  }
+
+  /**
+   * Update the user's Discord rich-presence for this Activity (e.g. the live
+   * score). No-op in mock mode. Failures are swallowed — presence is cosmetic.
+   */
+  async setActivity(details: string, state: string): Promise<void> {
+    if (this.isMock) return;
+    try {
+      await this.sdk.commands.setActivity({
+        activity: { type: 0, details, state },
+      });
+    } catch (err) {
+      console.warn('[discord] setActivity failed', err);
+    }
   }
 
   private constructor(sdk: IDiscordSDK, isMock: boolean) {

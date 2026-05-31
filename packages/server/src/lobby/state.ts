@@ -17,7 +17,12 @@
  *   ended     → idle        reset
  */
 
-import { COUNTDOWN_MS, type LobbyPhase, type PlayerSlot } from '@pingpong/shared';
+import {
+  type AiDifficulty,
+  COUNTDOWN_MS,
+  type LobbyPhase,
+  type PlayerSlot,
+} from '@pingpong/shared';
 import { log } from '../util/logger.js';
 import { afkTracker } from './afk.js';
 
@@ -55,6 +60,7 @@ export class LobbyStateMachine {
   private countdownTimer: ReturnType<typeof setInterval> | null = null;
   private countdownRemaining = 0;
   private readyUsers: Set<string> = new Set();
+  private aiDifficulty: AiDifficulty = 'medium';
   private lastHeartbeat: Map<string, number> = new Map();
   private socketToUser: Map<string, string> = new Map();
   private userToSocket: Map<string, string> = new Map();
@@ -226,7 +232,11 @@ export class LobbyStateMachine {
     return slot;
   }
 
-  startAiMatch(discordId: string, socketId: string): PlayerSlot | Error {
+  startAiMatch(
+    discordId: string,
+    socketId: string,
+    difficulty: AiDifficulty = 'medium',
+  ): PlayerSlot | Error {
     this.socketToUser.set(socketId, discordId);
     this.userToSocket.set(discordId, socketId);
     this.lastHeartbeat.set(discordId, Date.now());
@@ -250,14 +260,22 @@ export class LobbyStateMachine {
 
     this.stopCountdown();
     this.slots = { top: AI_USER_ID, bottom: discordId };
+    this.aiDifficulty = difficulty;
     this.readyUsers.clear();
     this.readyUsers.add(AI_USER_ID);
     this.readyUsers.add(discordId);
 
-    log.info(`[lobby] AI match requested: ${discordId} → bottom, ${AI_USER_ID} → top`);
+    log.info(
+      `[lobby] AI match requested: ${discordId} → bottom, ${AI_USER_ID} → top (difficulty=${difficulty})`,
+    );
     this.startCountdown();
 
     return 'bottom';
+  }
+
+  /** Current AI difficulty — read by the game loop to tune the bot paddle. */
+  getAiDifficulty(): AiDifficulty {
+    return this.aiDifficulty;
   }
 
   playerHeartbeat(discordId: string): void {
@@ -310,6 +328,7 @@ export class LobbyStateMachine {
     this.phase = 'idle';
     this.slots = {};
     this.paddleColors = {};
+    this.aiDifficulty = 'medium';
     this.readyUsers.clear();
     this.rematchRequests.clear();
     this.socketToUser.clear();

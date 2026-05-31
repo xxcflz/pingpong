@@ -37,7 +37,6 @@ export interface HudNode {
   readonly layer: Container;
   readonly scoreTop: Text;
   readonly scoreBottom: Text;
-  readonly rallyText: Text;
   readonly speedFill: Graphics;
   readonly speedLabel: Text;
   readonly banner: Text;
@@ -88,21 +87,6 @@ export function buildHud(): HudNode {
   scoreBottom.x = COURT_WIDTH / 2;
   scoreBottom.y = COURT_HEIGHT / 2 + 60;
   layer.addChild(scoreBottom);
-
-  // ── Rally counter ────────────────────────────────────────────
-  const rallyText = makeText({
-    text: 'Rally: 0',
-    label: 'rally',
-    style: {
-      fontFamily: FONT,
-      fontSize: 20,
-      fill: TEXT_DIM,
-    },
-  });
-  rallyText.anchor.set(0.5);
-  rallyText.x = COURT_WIDTH / 2;
-  rallyText.y = COURT_HEIGHT / 2 + 24;
-  layer.addChild(rallyText);
 
   // ── Speed gauge background ───────────────────────────────────
   const gaugeBg = new Graphics().roundRect(0, 0, GAUGE_WIDTH, GAUGE_HEIGHT, 4).fill(GAUGE_BG);
@@ -268,7 +252,6 @@ export function buildHud(): HudNode {
     layer,
     scoreTop,
     scoreBottom,
-    rallyText,
     speedFill,
     speedLabel,
     banner,
@@ -289,11 +272,6 @@ export function buildHud(): HudNode {
 export function setScores(hud: HudNode, top: number, bottom: number): void {
   hud.scoreTop.text = String(top);
   hud.scoreBottom.text = String(bottom);
-}
-
-/** Set rally count display. */
-export function setRally(hud: HudNode, count: number): void {
-  hud.rallyText.text = `Rally: ${count}`;
 }
 
 /**
