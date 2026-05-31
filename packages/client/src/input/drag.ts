@@ -1,8 +1,4 @@
-import {
-  COURT_WIDTH,
-  PADDLE_WIDTH,
-  PADDLE_MAX_SPEED,
-} from "@pingpong/shared";
+import { COURT_WIDTH, PADDLE_MAX_SPEED, PADDLE_WIDTH } from '@pingpong/shared';
 
 export interface DragCallbacks {
   onPaddleX: (x: number) => void;
@@ -28,7 +24,7 @@ interface Sample {
 }
 
 interface TestEvent {
-  type: "paddleX" | "release";
+  type: 'paddleX' | 'release';
   x?: number;
   velX?: number;
   t: number;
@@ -52,8 +48,9 @@ function clamp(value: number, min: number, max: number): number {
 
 function computeVelocity(samples: Sample[]): number {
   if (samples.length < 2) return 0;
-  const first = samples[0]!;
-  const last = samples[samples.length - 1]!;
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  if (!first || !last) return 0;
   const dt = last.t - first.t;
   if (dt <= 0) return 0;
   return (last.x - first.x) / (dt / 1000);
@@ -71,14 +68,14 @@ export function createDragHandler(
   const samples: Sample[] = [];
 
   const params = new URLSearchParams(window.location.search);
-  const testMode = params.get("test_input") === "1";
+  const testMode = params.get('test_input') === '1';
   if (testMode) {
     window.__test_dragEvents = [];
   }
 
   function recordTestEvent(event: TestEvent): void {
     if (testMode) {
-      window.__test_dragEvents!.push(event);
+      window.__test_dragEvents?.push(event);
     }
   }
 
@@ -86,7 +83,7 @@ export function createDragHandler(
   // to properly handle letterbox scaling
 
   function onPointerDown(e: PointerEvent): void {
-    if (e.button !== 0 && e.pointerType === "mouse") return;
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
     if (active) return;
 
     active = true;
@@ -103,7 +100,7 @@ export function createDragHandler(
 
     const x = clamp(courtX - dragStartOffset, MIN_X, MAX_X);
     callbacks.onPaddleX(x);
-    recordTestEvent({ type: "paddleX", x, t: performance.now() });
+    recordTestEvent({ type: 'paddleX', x, t: performance.now() });
   }
 
   function onPointerMove(e: PointerEvent): void {
@@ -119,12 +116,14 @@ export function createDragHandler(
       samples.shift();
     }
     const cutoff = now - VELOCITY_WINDOW_MS;
-    while (samples.length > 1 && samples[0]!.t < cutoff) {
+    while (samples.length > 1) {
+      const first = samples[0];
+      if (!first || first.t >= cutoff) break;
       samples.shift();
     }
 
     callbacks.onPaddleX(x);
-    recordTestEvent({ type: "paddleX", x, t: now });
+    recordTestEvent({ type: 'paddleX', x, t: now });
   }
 
   function onPointerUpOrCancel(e: PointerEvent): void {
@@ -135,7 +134,9 @@ export function createDragHandler(
 
     samples.push({ t: now, x: courtX });
     const cutoff = now - VELOCITY_WINDOW_MS;
-    while (samples.length > 1 && samples[0]!.t < cutoff) {
+    while (samples.length > 1) {
+      const first = samples[0];
+      if (!first || first.t >= cutoff) break;
       samples.shift();
     }
 
@@ -144,7 +145,7 @@ export function createDragHandler(
 
     callbacks.onDragEnd?.();
     callbacks.onRelease(velX);
-    recordTestEvent({ type: "release", velX, t: now });
+    recordTestEvent({ type: 'release', velX, t: now });
 
     try {
       target.releasePointerCapture(e.pointerId);
@@ -172,11 +173,11 @@ export function createDragHandler(
     if (enabled) return;
     enabled = true;
 
-    target.addEventListener("pointerdown", onPointerDownWrapper, downOpts);
-    target.addEventListener("pointermove", onPointerMove, moveOpts);
-    target.addEventListener("pointerup", onPointerUpOrCancel, upOpts);
-    target.addEventListener("pointercancel", onPointerUpOrCancel, upOpts);
-    target.addEventListener("touchmove", onTouchMove, { passive: false });
+    target.addEventListener('pointerdown', onPointerDownWrapper, downOpts);
+    target.addEventListener('pointermove', onPointerMove, moveOpts);
+    target.addEventListener('pointerup', onPointerUpOrCancel, upOpts);
+    target.addEventListener('pointercancel', onPointerUpOrCancel, upOpts);
+    target.addEventListener('touchmove', onTouchMove, { passive: false });
 
     if (testMode) {
       window.__test_dragHandler = controller;
@@ -187,11 +188,11 @@ export function createDragHandler(
     if (!enabled) return;
     enabled = false;
 
-    target.removeEventListener("pointerdown", onPointerDownWrapper, downOpts);
-    target.removeEventListener("pointermove", onPointerMove, moveOpts);
-    target.removeEventListener("pointerup", onPointerUpOrCancel, upOpts);
-    target.removeEventListener("pointercancel", onPointerUpOrCancel, upOpts);
-    target.removeEventListener("touchmove", onTouchMove);
+    target.removeEventListener('pointerdown', onPointerDownWrapper, downOpts);
+    target.removeEventListener('pointermove', onPointerMove, moveOpts);
+    target.removeEventListener('pointerup', onPointerUpOrCancel, upOpts);
+    target.removeEventListener('pointercancel', onPointerUpOrCancel, upOpts);
+    target.removeEventListener('touchmove', onTouchMove);
 
     active = false;
     samples.length = 0;

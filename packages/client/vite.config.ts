@@ -1,7 +1,7 @@
-import { defineConfig } from "vite";
+import { defineConfig } from 'vite';
 
 export default defineConfig({
-  envDir: "../..",
+  envDir: '../..',
   server: {
     port: 5173,
     host: true,
@@ -10,13 +10,13 @@ export default defineConfig({
       clientPort: 443,
     },
     proxy: {
-      '/api':        'http://localhost:3001',
-      '/socket.io':  { target: 'http://localhost:3001', ws: true },
-      '/spectate':   { target: 'http://localhost:3001', ws: true },
+      '/api': 'http://localhost:3001',
+      '/socket.io': { target: 'http://localhost:3001', ws: true },
+      '/spectate': { target: 'http://localhost:3001', ws: true },
     },
   },
   build: {
-    target: "es2022",
+    target: 'es2022',
     assetsInlineLimit: 0,
   },
 });

@@ -1,12 +1,12 @@
-import { Application, Container, Graphics, Text } from "pixi.js";
-import { COURT_WIDTH, COURT_HEIGHT, PADDLE_WIDTH, PADDLE_HEIGHT } from "@pingpong/shared";
+import { COURT_HEIGHT, COURT_WIDTH, PADDLE_HEIGHT, PADDLE_WIDTH } from '@pingpong/shared';
+import { type Application, Container, Graphics, Text } from 'pixi.js';
 
 export const PADDLE_COLORS = [
-  { color: 0x4dd2ff, name: "Cyan" },
-  { color: 0xff7a7a, name: "Rose" },
-  { color: 0x5eea8a, name: "Lime" },
-  { color: 0xffd700, name: "Gold" },
-  { color: 0xc77dff, name: "Violet" },
+  { color: 0x4dd2ff, name: 'Cyan' },
+  { color: 0xff7a7a, name: 'Rose' },
+  { color: 0x5eea8a, name: 'Lime' },
+  { color: 0xffd700, name: 'Gold' },
+  { color: 0xc77dff, name: 'Violet' },
 ] as const;
 
 const FONT = "'Courier New', Courier, monospace";
@@ -26,7 +26,7 @@ export class LandingPage {
   private readonly app: Application;
   private readonly root: Container;
   private readonly container: Container;
-  private selectedColor: number = PADDLE_COLORS[0]!.color;
+  private selectedColor: number = PADDLE_COLORS[0]?.color;
   private selectedIndex = 0;
   private readonly swatches: { bg: Graphics; ring: Graphics }[] = [];
   private readonly previewPaddle: Graphics;
@@ -41,7 +41,7 @@ export class LandingPage {
     this.app = app;
     this.root = new Container();
     this.container = new Container();
-    this.container.label = "landingPage";
+    this.container.label = 'landingPage';
 
     this.buildBackdrop();
     this.buildTitle();
@@ -57,7 +57,7 @@ export class LandingPage {
     app.stage.addChild(this.root);
 
     this.onResize = () => this.applyLetterbox();
-    window.addEventListener("resize", this.onResize);
+    window.addEventListener('resize', this.onResize);
     this.applyLetterbox();
 
     this.tickFn = (t) => this.onTick(t);
@@ -99,9 +99,7 @@ export class LandingPage {
   // ── Backdrop ────────────────────────────────────────────────────────────
 
   private buildBackdrop(): void {
-    const bg = new Graphics()
-      .rect(0, 0, COURT_WIDTH, COURT_HEIGHT)
-      .fill(BG_DARK);
+    const bg = new Graphics().rect(0, 0, COURT_WIDTH, COURT_HEIGHT).fill(BG_DARK);
     this.container.addChild(bg);
 
     // Top radial glow with mask to prevent overflow
@@ -109,14 +107,10 @@ export class LandingPage {
     for (let i = 8; i > 0; i--) {
       const r = 80 + i * 25;
       const alpha = (8 - i) * 0.04;
-      glow
-        .circle(COURT_WIDTH / 2, 155, r)
-        .fill({ color: ACCENT_BLUE, alpha });
+      glow.circle(COURT_WIDTH / 2, 155, r).fill({ color: ACCENT_BLUE, alpha });
     }
 
-    const glowMask = new Graphics()
-      .rect(0, 0, COURT_WIDTH, COURT_HEIGHT)
-      .fill(0xffffff);
+    const glowMask = new Graphics().rect(0, 0, COURT_WIDTH, COURT_HEIGHT).fill(0xffffff);
     glow.mask = glowMask;
 
     this.container.addChild(glowMask);
@@ -138,12 +132,12 @@ export class LandingPage {
   private buildTitle(): void {
     // Shadow layer
     const shadow = new Text({
-      text: "PING",
+      text: 'PING',
       style: {
         fontFamily: FONT,
         fontSize: 96,
         fill: 0x000000,
-        fontWeight: "900",
+        fontWeight: '900',
         letterSpacing: 4,
       },
     });
@@ -154,12 +148,12 @@ export class LandingPage {
     this.container.addChild(shadow);
 
     const title = new Text({
-      text: "PING",
+      text: 'PING',
       style: {
         fontFamily: FONT,
         fontSize: 96,
         fill: ACCENT_BLUE,
-        fontWeight: "900",
+        fontWeight: '900',
         letterSpacing: 4,
       },
     });
@@ -169,12 +163,12 @@ export class LandingPage {
     this.container.addChild(title);
 
     const pong = new Text({
-      text: "PONG",
+      text: 'PONG',
       style: {
         fontFamily: FONT,
         fontSize: 96,
         fill: TEXT_WHITE,
-        fontWeight: "900",
+        fontWeight: '900',
         letterSpacing: 4,
       },
     });
@@ -187,9 +181,12 @@ export class LandingPage {
     const divider = new Graphics();
     const divY = 260;
     divider
-      .circle(COURT_WIDTH / 2 - 30, divY, 3).fill(ACCENT_BLUE)
-      .circle(COURT_WIDTH / 2, divY, 4).fill(TEXT_WHITE)
-      .circle(COURT_WIDTH / 2 + 30, divY, 3).fill(ACCENT_BLUE);
+      .circle(COURT_WIDTH / 2 - 30, divY, 3)
+      .fill(ACCENT_BLUE)
+      .circle(COURT_WIDTH / 2, divY, 4)
+      .fill(TEXT_WHITE)
+      .circle(COURT_WIDTH / 2 + 30, divY, 3)
+      .fill(ACCENT_BLUE);
     this.container.addChild(divider);
   }
 
@@ -197,13 +194,13 @@ export class LandingPage {
 
   private buildColorPicker(): void {
     const header = new Text({
-      text: "PICK YOUR PADDLE",
+      text: 'PICK YOUR PADDLE',
       style: {
         fontFamily: FONT,
         fontSize: 18,
         fill: TEXT_DIM,
         letterSpacing: 4,
-        fontWeight: "bold",
+        fontWeight: 'bold',
       },
     });
     header.anchor.set(0.5);
@@ -224,9 +221,9 @@ export class LandingPage {
       const hitBg = new Graphics()
         .roundRect(cx, y, swatchW, swatchH, 8)
         .fill({ color: 0xffffff, alpha: 0.01 });
-      hitBg.eventMode = "static";
-      hitBg.cursor = "pointer";
-      hitBg.on("pointertap", () => this.updateSelection(i));
+      hitBg.eventMode = 'static';
+      hitBg.cursor = 'pointer';
+      hitBg.on('pointertap', () => this.updateSelection(i));
       this.container.addChild(hitBg);
 
       const ring = new Graphics()
@@ -235,9 +232,7 @@ export class LandingPage {
       ring.alpha = 0;
       this.container.addChild(ring);
 
-      const bg = new Graphics()
-        .roundRect(cx, y, swatchW, swatchH, 8)
-        .fill(opt.color);
+      const bg = new Graphics().roundRect(cx, y, swatchW, swatchH, 8).fill(opt.color);
       bg.alpha = 0.5;
       this.container.addChild(bg);
 
@@ -247,7 +242,10 @@ export class LandingPage {
 
   private updateSelection(index: number): void {
     this.selectedIndex = index;
-    this.selectedColor = PADDLE_COLORS[index]!.color;
+    const paddleColor = PADDLE_COLORS[index];
+    if (paddleColor) {
+      this.selectedColor = paddleColor.color;
+    }
 
     this.swatches.forEach((s, i) => {
       const selected = i === index;
@@ -258,7 +256,8 @@ export class LandingPage {
     });
 
     // Update preview paddle
-    this.previewPaddle.clear()
+    this.previewPaddle
+      .clear()
       .roundRect(-PADDLE_WIDTH / 2, -PADDLE_HEIGHT / 2, PADDLE_WIDTH, PADDLE_HEIGHT, 6)
       .fill(this.selectedColor);
 
@@ -304,9 +303,7 @@ export class LandingPage {
     this.container.addChild(paddle);
 
     // Bouncing ball
-    const ball = new Graphics()
-      .circle(0, 0, 7)
-      .fill(TEXT_WHITE);
+    const ball = new Graphics().circle(0, 0, 7).fill(TEXT_WHITE);
     ball.x = cx;
     ball.y = cy;
     this.container.addChild(ball);
@@ -320,13 +317,13 @@ export class LandingPage {
     const cy = 760;
 
     const header = new Text({
-      text: "HOW TO PLAY",
+      text: 'HOW TO PLAY',
       style: {
         fontFamily: FONT,
         fontSize: 18,
         fill: TEXT_DIM,
         letterSpacing: 4,
-        fontWeight: "bold",
+        fontWeight: 'bold',
       },
     });
     header.anchor.set(0.5);
@@ -344,16 +341,18 @@ export class LandingPage {
           g.moveTo(14, 0).lineTo(22, 0).stroke({ color: ACCENT_BLUE, width: 2 });
           g.moveTo(18, -4).lineTo(22, 0).lineTo(18, 4).stroke({ color: ACCENT_BLUE, width: 2 });
         },
-        text: "Drag to move paddle",
+        text: 'Drag to move paddle',
       },
       {
         draw: (g) => {
           // Flick icon: curved arrow
-          g.arc(0, 4, 14, -Math.PI * 0.8, -Math.PI * 0.2, false)
-            .stroke({ color: 0xffd700, width: 2 });
+          g.arc(0, 4, 14, -Math.PI * 0.8, -Math.PI * 0.2, false).stroke({
+            color: 0xffd700,
+            width: 2,
+          });
           g.moveTo(10, -4).lineTo(14, -10).lineTo(6, -10).fill(0xffd700);
         },
-        text: "Flick for spin effect",
+        text: 'Flick for spin effect',
       },
       {
         draw: (g) => {
@@ -361,7 +360,7 @@ export class LandingPage {
           g.circle(0, 0, 10).stroke({ color: 0x5eea8a, width: 2 });
           g.circle(0, 0, 3).fill(0x5eea8a);
         },
-        text: "Release to stop",
+        text: 'Release to stop',
       },
     ];
 
@@ -407,23 +406,33 @@ export class LandingPage {
     const y1 = 1000;
     const y2 = 1085;
 
-    this.container.addChild(this.buildButton({
-      label: "PLAY ONLINE",
-      sublabel: "Match with other players",
-      y: y1, w: btnW, h: btnH, color: ACCENT_BLUE,
-      onTap: () => callbacks.onPlayOnline(this.selectedColor),
-    }));
+    this.container.addChild(
+      this.buildButton({
+        label: 'PLAY ONLINE',
+        sublabel: 'Match with other players',
+        y: y1,
+        w: btnW,
+        h: btnH,
+        color: ACCENT_BLUE,
+        onTap: () => callbacks.onPlayOnline(this.selectedColor),
+      }),
+    );
 
-    this.container.addChild(this.buildButton({
-      label: "PLAY VS AI",
-      sublabel: "Practice against the bot",
-      y: y2, w: btnW, h: btnH, color: ACCENT_GREEN,
-      onTap: () => callbacks.onPlayAi(this.selectedColor),
-    }));
+    this.container.addChild(
+      this.buildButton({
+        label: 'PLAY VS AI',
+        sublabel: 'Practice against the bot',
+        y: y2,
+        w: btnW,
+        h: btnH,
+        color: ACCENT_GREEN,
+        onTap: () => callbacks.onPlayAi(this.selectedColor),
+      }),
+    );
 
     // Footer hint
     const hint = new Text({
-      text: "First to 11 points wins",
+      text: 'First to 11 points wins',
       style: { fontFamily: FONT, fontSize: 13, fill: TEXT_SUBTLE, letterSpacing: 2 },
     });
     hint.anchor.set(0.5);
@@ -435,19 +444,19 @@ export class LandingPage {
   private buildButton(opts: {
     label: string;
     sublabel: string;
-    y: number; w: number; h: number;
+    y: number;
+    w: number;
+    h: number;
     color: number;
     onTap: () => void;
   }): Container {
     const btn = new Container();
     const bx = (COURT_WIDTH - opts.w) / 2;
 
-    const bg = new Graphics()
-      .roundRect(bx, opts.y, opts.w, opts.h, 14)
-      .fill(opts.color);
-    bg.eventMode = "static";
-    bg.cursor = "pointer";
-    bg.on("pointertap", opts.onTap);
+    const bg = new Graphics().roundRect(bx, opts.y, opts.w, opts.h, 14).fill(opts.color);
+    bg.eventMode = 'static';
+    bg.cursor = 'pointer';
+    bg.on('pointertap', opts.onTap);
     btn.addChild(bg);
 
     const label = new Text({
@@ -456,7 +465,7 @@ export class LandingPage {
         fontFamily: FONT,
         fontSize: 22,
         fill: BG_DARK,
-        fontWeight: "900",
+        fontWeight: '900',
         letterSpacing: 3,
       },
     });
@@ -488,7 +497,7 @@ export class LandingPage {
   destroy(): void {
     this.destroyed = true;
     this.app.ticker.remove(this.tickFn);
-    window.removeEventListener("resize", this.onResize);
+    window.removeEventListener('resize', this.onResize);
     this.root.destroy({ children: true });
   }
 

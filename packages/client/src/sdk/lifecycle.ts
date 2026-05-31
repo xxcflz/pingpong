@@ -1,5 +1,5 @@
-import { Events } from "@discord/embedded-app-sdk";
-import type { DiscordContext } from "./discord.js";
+import { Events } from '@discord/embedded-app-sdk';
+import type { DiscordContext } from './discord.js';
 
 /** Discord SDK layout_mode enum values. */
 const LAYOUT_MODE_PIP = 1;
@@ -101,9 +101,7 @@ export class LifecycleObserver {
       this.reconcile();
     };
 
-    document.addEventListener("visibilitychange", handler);
-    this.cleanup.push(() =>
-      document.removeEventListener("visibilitychange", handler),
-    );
+    document.addEventListener('visibilitychange', handler);
+    this.cleanup.push(() => document.removeEventListener('visibilitychange', handler));
   }
 }

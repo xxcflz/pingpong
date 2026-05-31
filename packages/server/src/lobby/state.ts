@@ -17,16 +17,12 @@
  *   ended     → idle        reset
  */
 
-import {
-  COUNTDOWN_MS,
-  type LobbyPhase,
-  type PlayerSlot,
-} from "@pingpong/shared";
-import { log } from "../util/logger.js";
-import { afkTracker } from "./afk.js";
+import { COUNTDOWN_MS, type LobbyPhase, type PlayerSlot } from '@pingpong/shared';
+import { log } from '../util/logger.js';
+import { afkTracker } from './afk.js';
 
-export const AI_USER_ID = "ai:pingpong";
-export const AI_USERNAME = "Pong AI";
+export const AI_USER_ID = 'ai:pingpong';
+export const AI_USERNAME = 'Pong AI';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -53,7 +49,7 @@ export interface LobbyCallbacks {
 // ── State Machine ───────────────────────────────────────────────────────────
 
 export class LobbyStateMachine {
-  private phase: LobbyPhase = "idle";
+  private phase: LobbyPhase = 'idle';
   private slots: Slots = {};
   private paddleColors: Record<string, number> = {};
   private countdownTimer: ReturnType<typeof setInterval> | null = null;
@@ -126,8 +122,8 @@ export class LobbyStateMachine {
   }
 
   getSlotForUser(discordId: string): PlayerSlot | undefined {
-    if (this.slots.top === discordId) return "top";
-    if (this.slots.bottom === discordId) return "bottom";
+    if (this.slots.top === discordId) return 'top';
+    if (this.slots.bottom === discordId) return 'bottom';
     return undefined;
   }
 
@@ -142,8 +138,8 @@ export class LobbyStateMachine {
     this.userToSocket.set(discordId, socketId);
     this.lastHeartbeat.set(discordId, Date.now());
 
-    if (this.phase === "idle") {
-      this.phase = "lobby";
+    if (this.phase === 'idle') {
+      this.phase = 'lobby';
     }
 
     log.info(`[lobby] player joined: ${discordId} (phase=${this.phase})`);
@@ -164,11 +160,13 @@ export class LobbyStateMachine {
     if (this.slots.top === discordId) this.slots.top = undefined;
     if (this.slots.bottom === discordId) this.slots.bottom = undefined;
 
-    log.info(`[lobby] player left: ${discordId} (hadSlot=${hadSlot ?? "none"}, phase=${this.phase})`);
+    log.info(
+      `[lobby] player left: ${discordId} (hadSlot=${hadSlot ?? 'none'}, phase=${this.phase})`,
+    );
 
-    if (this.phase === "countdown") {
+    if (this.phase === 'countdown') {
       this.stopCountdown();
-      this.phase = "lobby";
+      this.phase = 'lobby';
       this.slots = {};
       this.readyUsers.clear();
       this.broadcastLobbyUpdate();
@@ -176,7 +174,7 @@ export class LobbyStateMachine {
     }
 
     if (this.socketToUser.size === 0) {
-      this.phase = "idle";
+      this.phase = 'idle';
       return;
     }
 
@@ -195,26 +193,26 @@ export class LobbyStateMachine {
     this.lastHeartbeat.set(discordId, Date.now());
 
     if (this.readyUsers.has(discordId)) {
-      return new Error("ALREADY_READY");
+      return new Error('ALREADY_READY');
     }
 
     if (this.slots.top && this.slots.bottom) {
-      this.callbacks.onError(socketId, "LOBBY_FULL", "Both player slots are taken");
-      return new Error("LOBBY_FULL");
+      this.callbacks.onError(socketId, 'LOBBY_FULL', 'Both player slots are taken');
+      return new Error('LOBBY_FULL');
     }
 
     if (discordId === AI_USER_ID) {
-      this.callbacks.onError(socketId, "AI_USER", "AI user cannot readyToggle");
-      return new Error("AI_USER");
+      this.callbacks.onError(socketId, 'AI_USER', 'AI user cannot readyToggle');
+      return new Error('AI_USER');
     }
 
     let slot: PlayerSlot;
     if (!this.slots.bottom) {
       this.slots.bottom = discordId;
-      slot = "bottom";
+      slot = 'bottom';
     } else {
       this.slots.top = discordId;
-      slot = "top";
+      slot = 'top';
     }
 
     this.readyUsers.add(discordId);
@@ -233,17 +231,21 @@ export class LobbyStateMachine {
     this.userToSocket.set(discordId, socketId);
     this.lastHeartbeat.set(discordId, Date.now());
 
-    if (this.phase !== "idle" && this.phase !== "lobby") {
-      this.callbacks.onError(socketId, "MATCH_IN_PROGRESS", "Cannot start AI match while a match is active");
-      return new Error("MATCH_IN_PROGRESS");
+    if (this.phase !== 'idle' && this.phase !== 'lobby') {
+      this.callbacks.onError(
+        socketId,
+        'MATCH_IN_PROGRESS',
+        'Cannot start AI match while a match is active',
+      );
+      return new Error('MATCH_IN_PROGRESS');
     }
 
     const occupiedByOtherUser = [this.slots.top, this.slots.bottom].some(
       (id) => id && id !== discordId && id !== AI_USER_ID,
     );
     if (occupiedByOtherUser) {
-      this.callbacks.onError(socketId, "LOBBY_BUSY", "Another player is already in the lobby");
-      return new Error("LOBBY_BUSY");
+      this.callbacks.onError(socketId, 'LOBBY_BUSY', 'Another player is already in the lobby');
+      return new Error('LOBBY_BUSY');
     }
 
     this.stopCountdown();
@@ -255,7 +257,7 @@ export class LobbyStateMachine {
     log.info(`[lobby] AI match requested: ${discordId} → bottom, ${AI_USER_ID} → top`);
     this.startCountdown();
 
-    return "bottom";
+    return 'bottom';
   }
 
   playerHeartbeat(discordId: string): void {
@@ -267,24 +269,24 @@ export class LobbyStateMachine {
    * During countdown the timer is stopped; on resume it must be restarted.
    */
   pause(): void {
-    if (this.phase === "playing") {
-      this.phase = "paused";
-    } else if (this.phase === "countdown") {
+    if (this.phase === 'playing') {
+      this.phase = 'paused';
+    } else if (this.phase === 'countdown') {
       this.stopCountdown();
-      this.phase = "paused";
+      this.phase = 'paused';
     }
   }
 
   resume(): void {
-    if (this.phase === "paused") {
-      this.phase = "playing";
+    if (this.phase === 'paused') {
+      this.phase = 'playing';
       afkTracker.resetAll();
     }
   }
 
   matchEnd(): void {
-    if (this.phase === "playing" || this.phase === "paused") {
-      this.phase = "ended";
+    if (this.phase === 'playing' || this.phase === 'paused') {
+      this.phase = 'ended';
     }
   }
 
@@ -305,7 +307,7 @@ export class LobbyStateMachine {
 
   reset(): void {
     this.stopCountdown();
-    this.phase = "idle";
+    this.phase = 'idle';
     this.slots = {};
     this.paddleColors = {};
     this.readyUsers.clear();
@@ -333,13 +335,13 @@ export class LobbyStateMachine {
    * Transitions from 'ended' back to 'countdown' phase.
    */
   startRematchCountdown(): void {
-    if (this.phase !== "ended") {
+    if (this.phase !== 'ended') {
       log.warn(`[lobby] startRematchCountdown ignored: phase=${this.phase}`);
       return;
     }
 
     if (!this.slots.top || !this.slots.bottom) {
-      log.warn("[lobby] startRematchCountdown: missing slots");
+      log.warn('[lobby] startRematchCountdown: missing slots');
       return;
     }
 
@@ -378,7 +380,7 @@ export class LobbyStateMachine {
   // ── Internal ────────────────────────────────────────────────────────────
 
   private startCountdown(): void {
-    this.phase = "countdown";
+    this.phase = 'countdown';
     this.countdownRemaining = Math.ceil(COUNTDOWN_MS / 1000);
 
     log.info(`[lobby] countdown started: ${this.countdownRemaining}s`);
@@ -391,10 +393,10 @@ export class LobbyStateMachine {
         this.callbacks.onCountdownTick(this.countdownRemaining);
       } else {
         this.stopCountdown();
-        this.phase = "playing";
+        this.phase = 'playing';
 
         if (this.slots.top && this.slots.bottom) {
-          log.info("[lobby] countdown complete → playing");
+          log.info('[lobby] countdown complete → playing');
           this.callbacks.onCountdownComplete(this.slots.top, this.slots.bottom);
         }
       }

@@ -1,5 +1,5 @@
-import { Container, Graphics, Text } from "pixi.js";
-import { COURT_WIDTH, COURT_HEIGHT } from "@pingpong/shared";
+import { COURT_HEIGHT, COURT_WIDTH } from '@pingpong/shared';
+import { Container, Graphics, Text } from 'pixi.js';
 
 const FONT = "'Courier New', Courier, monospace";
 const TEXT_WHITE = 0xff_ff_ff;
@@ -29,7 +29,7 @@ export interface EndScreenNode {
 
 export function buildEndScreen(data: EndScreenData): EndScreenNode {
   const container = new Container();
-  container.label = "endScreen";
+  container.label = 'endScreen';
 
   const overlay = new Graphics()
     .rect(0, 0, COURT_WIDTH, COURT_HEIGHT)
@@ -43,7 +43,7 @@ export function buildEndScreen(data: EndScreenData): EndScreenNode {
   container.addChild(subtitle);
 
   const waitingText = new Text({
-    text: "",
+    text: '',
     style: {
       fontFamily: FONT,
       fontSize: 16,
@@ -62,22 +62,20 @@ export function buildEndScreen(data: EndScreenData): EndScreenNode {
   const btnGap = 40;
 
   // Rematch button (left)
-  const rematchBtn = new Graphics()
-    .roundRect(0, 0, btnW, btnH, 8)
-    .fill(ACCENT_BLUE);
+  const rematchBtn = new Graphics().roundRect(0, 0, btnW, btnH, 8).fill(ACCENT_BLUE);
   rematchBtn.x = COURT_WIDTH / 2 - btnW - btnGap / 2;
   rematchBtn.y = btnY;
-  rematchBtn.eventMode = "static";
-  rematchBtn.cursor = "pointer";
-  rematchBtn.on("pointertap", data.onRematch);
+  rematchBtn.eventMode = 'static';
+  rematchBtn.cursor = 'pointer';
+  rematchBtn.on('pointertap', data.onRematch);
   container.addChild(rematchBtn);
 
   const rematchText = new Text({
-    text: "REMATCH",
+    text: 'REMATCH',
     style: {
       fontFamily: FONT,
       fontSize: 20,
-      fontWeight: "bold",
+      fontWeight: 'bold',
       fill: TEXT_WHITE,
     },
   });
@@ -87,22 +85,20 @@ export function buildEndScreen(data: EndScreenData): EndScreenNode {
   rematchBtn.addChild(rematchText);
 
   // Return to lobby button (right)
-  const lobbyBtn = new Graphics()
-    .roundRect(0, 0, btnW, btnH, 8)
-    .fill(ACCENT_GREEN);
+  const lobbyBtn = new Graphics().roundRect(0, 0, btnW, btnH, 8).fill(ACCENT_GREEN);
   lobbyBtn.x = COURT_WIDTH / 2 + btnGap / 2;
   lobbyBtn.y = btnY;
-  lobbyBtn.eventMode = "static";
-  lobbyBtn.cursor = "pointer";
-  lobbyBtn.on("pointertap", data.onReturnToLobby);
+  lobbyBtn.eventMode = 'static';
+  lobbyBtn.cursor = 'pointer';
+  lobbyBtn.on('pointertap', data.onReturnToLobby);
   container.addChild(lobbyBtn);
 
   const lobbyText = new Text({
-    text: "RETURN TO LOBBY",
+    text: 'RETURN TO LOBBY',
     style: {
       fontFamily: FONT,
       fontSize: 18,
-      fontWeight: "bold",
+      fontWeight: 'bold',
       fill: TEXT_WHITE,
     },
   });
@@ -126,13 +122,13 @@ function buildHeadline(data: EndScreenData): Text {
   let text: string;
 
   switch (data.end_reason) {
-    case "score":
+    case 'score':
       text = `${data.winnerName} wins ${data.scoreA}-${data.scoreB}`;
       break;
-    case "forfeit_dc":
+    case 'forfeit_dc':
       text = `${data.winnerName} wins (${data.loserName} disconnected)`;
       break;
-    case "forfeit_afk":
+    case 'forfeit_afk':
       text = `${data.winnerName} wins (${data.loserName} was AFK)`;
       break;
     default:
@@ -145,8 +141,8 @@ function buildHeadline(data: EndScreenData): Text {
       fontFamily: FONT,
       fontSize: 36,
       fill: ACCENT_GOLD,
-      fontWeight: "bold",
-      align: "center",
+      fontWeight: 'bold',
+      align: 'center',
       wordWrap: true,
       wordWrapWidth: COURT_WIDTH - 60,
     },
@@ -160,11 +156,11 @@ function buildHeadline(data: EndScreenData): Text {
 function buildSubtitle(data: EndScreenData): Text {
   let text: string;
 
-  if (data.end_reason === "score" && data.rallyCountMax > 0) {
+  if (data.end_reason === 'score' && data.rallyCountMax > 0) {
     text = `Longest rally: ${data.rallyCountMax}`;
-  } else if (data.end_reason === "forfeit_dc") {
+  } else if (data.end_reason === 'forfeit_dc') {
     text = `${data.scoreA}-${data.scoreB}`;
-  } else if (data.end_reason === "forfeit_afk") {
+  } else if (data.end_reason === 'forfeit_afk') {
     text = `${data.scoreA}-${data.scoreB}`;
   } else {
     text = `${data.scoreA}-${data.scoreB}`;
@@ -176,7 +172,7 @@ function buildSubtitle(data: EndScreenData): Text {
       fontFamily: FONT,
       fontSize: 22,
       fill: TEXT_WHITE,
-      align: "center",
+      align: 'center',
     },
   });
   label.anchor.set(0.5);

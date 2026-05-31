@@ -1,33 +1,30 @@
+import type { ClientToServerEvent, ServerToPlayerEvent } from '@pingpong/shared';
 /**
  * Thin typed wrapper around socket.io-client.
  *
  * Uses the `t` discriminant field from shared event unions as the
  * Socket.IO event name.  Zero rendering / DOM deps — pure data layer.
  */
-import { io, type Socket } from "socket.io-client";
-import type {
-  ClientToServerEvent,
-  ServerToPlayerEvent,
-} from "@pingpong/shared";
+import { type Socket, io } from 'socket.io-client';
 
 /** Narrow a discriminated union to the member whose `t` matches K. */
-type ExtractByT<
-  TUnion extends { readonly t: string },
-  K extends string,
-> = Extract<TUnion, { readonly t: K }>;
+type ExtractByT<TUnion extends { readonly t: string }, K extends string> = Extract<
+  TUnion,
+  { readonly t: K }
+>;
 
 export interface TypedSocket {
   /** Send a client→server event. `msg.t` becomes the Socket.IO event name. */
   emit<T extends ClientToServerEvent>(msg: T): void;
 
   /** Register a handler for a specific server→player event type. */
-  on<K extends ServerToPlayerEvent["t"]>(
+  on<K extends ServerToPlayerEvent['t']>(
     t: K,
     handler: (msg: ExtractByT<ServerToPlayerEvent, K>) => void,
   ): void;
 
   /** Remove all handlers for a specific event type. */
-  off<K extends ServerToPlayerEvent["t"]>(t: K): void;
+  off<K extends ServerToPlayerEvent['t']>(t: K): void;
 
   disconnect(): void;
 
@@ -42,8 +39,8 @@ export interface SocketOpts {
 
 export function createSocket(url: string, opts?: SocketOpts): TypedSocket {
   const socket: Socket = io(url, {
-    path: opts?.path ?? "/ws",
-    transports: opts?.transports ?? ["websocket"],
+    path: opts?.path ?? '/ws',
+    transports: opts?.transports ?? ['websocket'],
   });
 
   return {
@@ -51,7 +48,7 @@ export function createSocket(url: string, opts?: SocketOpts): TypedSocket {
       socket.emit(msg.t, msg);
     },
 
-    on<K extends ServerToPlayerEvent["t"]>(
+    on<K extends ServerToPlayerEvent['t']>(
       t: K,
       handler: (msg: ExtractByT<ServerToPlayerEvent, K>) => void,
     ): void {
@@ -60,7 +57,7 @@ export function createSocket(url: string, opts?: SocketOpts): TypedSocket {
       });
     },
 
-    off<K extends ServerToPlayerEvent["t"]>(t: K): void {
+    off<K extends ServerToPlayerEvent['t']>(t: K): void {
       socket.off(t as string);
     },
 

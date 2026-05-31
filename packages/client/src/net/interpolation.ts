@@ -9,10 +9,7 @@
  *
  * Pure data — no Pixi, no DOM.
  */
-import {
-  INTERPOLATION_BUFFER_MS,
-  RECONCILE_BALL_TOLERANCE_PX,
-} from "@pingpong/shared";
+import { INTERPOLATION_BUFFER_MS, RECONCILE_BALL_TOLERANCE_PX } from '@pingpong/shared';
 
 /** Distance threshold (px) above which we blend instead of snapping. */
 const BLEND_DISTANCE_THRESHOLD = RECONCILE_BALL_TOLERANCE_PX * 8; // 80 px
@@ -60,9 +57,7 @@ export interface InterpolationDeps<T> {
   distance: (a: T, b: T) => number;
 }
 
-export function createInterpolationBuffer<T>(
-  deps: InterpolationDeps<T>,
-): InterpolationBuffer<T> {
+export function createInterpolationBuffer<T>(deps: InterpolationDeps<T>): InterpolationBuffer<T> {
   const buffer: TimedEntry<T>[] = [];
 
   // Blend state — activated when a large-distance jump is detected
@@ -76,13 +71,15 @@ export function createInterpolationBuffer<T>(
 
     // Check for large-distance jump before pushing
     if (buffer.length > 0) {
-      const last = buffer[buffer.length - 1]!;
-      const dist = deps.distance(last.data, data);
-      if (dist > BLEND_DISTANCE_THRESHOLD) {
-        blendActive = true;
-        blendFrom = last.data;
-        blendTo = data;
-        blendFrameCount = 0;
+      const last = buffer[buffer.length - 1];
+      if (last) {
+        const dist = deps.distance(last.data, data);
+        if (dist > BLEND_DISTANCE_THRESHOLD) {
+          blendActive = true;
+          blendFrom = last.data;
+          blendTo = data;
+          blendFrameCount = 0;
+        }
       }
     }
 
@@ -102,14 +99,16 @@ export function createInterpolationBuffer<T>(
     // Find the two entries that bracket targetTime
     let lo = 0;
     for (let i = 0; i < buffer.length - 1; i++) {
-      if (buffer[i + 1]!.arrivalTimeMs <= targetTime) {
+      const next = buffer[i + 1];
+      if (next && next.arrivalTimeMs <= targetTime) {
         lo = i + 1;
       }
     }
     const hi = Math.min(lo + 1, buffer.length - 1);
 
-    const entryA = buffer[lo]!;
-    const entryB = buffer[hi]!;
+    const entryA = buffer[lo];
+    const entryB = buffer[hi];
+    if (!entryA || !entryB) return null;
 
     const dt = entryB.arrivalTimeMs - entryA.arrivalTimeMs;
     let t: number;

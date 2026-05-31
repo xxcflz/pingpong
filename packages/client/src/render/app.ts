@@ -1,4 +1,4 @@
-import { Application } from "pixi.js";
+import { Application } from 'pixi.js';
 
 /**
  * Boot a Pixi v8 Application attached to the given canvas element.

@@ -9,10 +9,7 @@
  *
  * Pure data — no Pixi, no DOM, no Socket.IO import.
  */
-import {
-  RECONCILE_PADDLE_TOLERANCE_PX,
-  type PaddleMoveEvent,
-} from "@pingpong/shared";
+import { type PaddleMoveEvent, RECONCILE_PADDLE_TOLERANCE_PX } from '@pingpong/shared';
 
 /** Maximum pending inputs before we start dropping oldest (safety valve). */
 const MAX_PENDING = 120;
@@ -90,7 +87,7 @@ export function createPredictionEngine(deps?: PredictionDeps): PredictionEngine 
     offsetX = 0; // user intent supersedes any pending correction
 
     const msg: PaddleMoveEvent = {
-      t: "paddle_move",
+      t: 'paddle_move',
       pos: { x, y: 0 },
       vel: { x: velX, y: 0 },
       seq,
@@ -106,7 +103,10 @@ export function createPredictionEngine(deps?: PredictionDeps): PredictionEngine 
   }
 
   function onSnapshot(authoritativePaddleX: number, lastProcessedSeq: number): void {
-    while (pending.length > 0 && pending[0]!.seq <= lastProcessedSeq) {
+    while (
+      pending.length > 0 &&
+      (pending[0]?.seq ?? Number.POSITIVE_INFINITY) <= lastProcessedSeq
+    ) {
       pending.shift();
     }
 

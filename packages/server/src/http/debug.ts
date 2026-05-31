@@ -1,9 +1,13 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { room } from '../game/room.js';
-import { lobby } from '../lobby/state.js';
-import { stopLoop } from '../game/loop.js';
-import { reset as resetReconnect, getDisconnectedUserIds, isInGraceWindow } from '../lobby/reconnect.js';
 import { cancelPendingResets } from '../game/finish.js';
+import { stopLoop } from '../game/loop.js';
+import { room } from '../game/room.js';
+import {
+  getDisconnectedUserIds,
+  isInGraceWindow,
+  reset as resetReconnect,
+} from '../lobby/reconnect.js';
+import { lobby } from '../lobby/state.js';
 
 const debugRoutes: FastifyPluginAsync = async (app) => {
   app.get('/api/_debug/tick', async (_req, reply) => {

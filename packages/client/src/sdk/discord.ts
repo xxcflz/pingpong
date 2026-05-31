@@ -1,12 +1,12 @@
 import {
   DiscordSDK,
   DiscordSDKMock,
-  patchUrlMappings,
   type IDiscordSDK,
-} from "@discord/embedded-app-sdk";
-import { DISCORD_CLIENT_ID, SERVER_HOST } from "../env";
+  patchUrlMappings,
+} from '@discord/embedded-app-sdk';
+import { DISCORD_CLIENT_ID, SERVER_HOST } from '../env';
 
-const DISCORD_PROXY_PREFIXES = ["/api", "/ws", "/spectate"] as const;
+const DISCORD_PROXY_PREFIXES = ['/api', '/ws', '/spectate'] as const;
 
 export class DiscordContext {
   /** Internal flag — true once patchUrlMappings has run. */
@@ -46,19 +46,18 @@ export class DiscordContext {
   static async init(clientId?: string, serverHost = SERVER_HOST): Promise<DiscordContext> {
     const id = clientId ?? DISCORD_CLIENT_ID;
     const isMock = isMockMode();
-    
-    const sdk: IDiscordSDK = isMock
-      ? new DiscordSDKMock(id, null, null, null)
-      : new DiscordSDK(id);
+
+    const sdk: IDiscordSDK = isMock ? new DiscordSDKMock(id, null, null, null) : new DiscordSDK(id);
 
     // Step 2 — wait until Discord signals READY (with timeout fallback)
     try {
       await Promise.race([
         sdk.ready(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("sdk.ready() timeout after 5s")), 5000))
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('sdk.ready() timeout after 5s')), 5000),
+        ),
       ]);
-    } catch (err) {
-    }
+    } catch (err) {}
 
     const ctx = new DiscordContext(sdk, isMock);
 
@@ -77,9 +76,7 @@ export class DiscordContext {
   /** Assert that patchUrlMappings has already been called. */
   assertReady(): void {
     if (!this._patched) {
-      throw new Error(
-        "[DiscordContext] Cannot perform network calls before init() completes.",
-      );
+      throw new Error('[DiscordContext] Cannot perform network calls before init() completes.');
     }
   }
 
@@ -89,27 +86,26 @@ export class DiscordContext {
    * Call this AFTER init() returns.
    */
   async authorize(serverHost: string): Promise<void> {
-    
     // This is a convenience — callers can also use sdk.commands directly.
     const { code } = await this.sdk.commands.authorize({
       client_id: this.sdk.clientId,
-      response_type: "code",
-      state: "",
-      prompt: "none",
-      scope: ["identify"],
+      response_type: 'code',
+      state: '',
+      prompt: 'none',
+      scope: ['identify'],
     });
 
     const tokenBody = JSON.stringify({ code });
     const tokenUrls = this.isMock
       ? [`${normalizeServerHost(serverHost)}/api/token`]
-      : ["/api/api/token", "/api/token"];
+      : ['/api/api/token', '/api/token'];
 
     let res: Response | null = null;
-    let responseText = "";
+    let responseText = '';
     for (const fetchUrl of tokenUrls) {
       res = await fetch(fetchUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: tokenBody,
       });
       responseText = await res.text();
@@ -119,7 +115,7 @@ export class DiscordContext {
     }
 
     if (!res) {
-      throw new Error("Token exchange failed before request was sent");
+      throw new Error('Token exchange failed before request was sent');
     }
 
     if (!res.ok) {
@@ -131,7 +127,7 @@ export class DiscordContext {
     }
 
     // Now try to parse as JSON
-    let data;
+    let data: unknown;
     try {
       data = JSON.parse(responseText);
     } catch (parseError) {
@@ -151,15 +147,15 @@ export class DiscordContext {
 /** Detect mock mode — enabled by `?frame_id=mock` OR when `frame_id` is missing (auto-mock). */
 function isMockMode(): boolean {
   const params = new URLSearchParams(window.location.search);
-  if (params.has("frame_id")) {
-    return params.get("frame_id") === "mock";
+  if (params.has('frame_id')) {
+    return params.get('frame_id') === 'mock';
   }
   return true;
 }
 
 function createUrlMappings(serverHost: string): Array<{ prefix: string; target: string }> {
   const base = toUrl(serverHost);
-  const basePath = base.pathname === "/" ? "" : base.pathname.replace(/\/$/, "");
+  const basePath = base.pathname === '/' ? '' : base.pathname.replace(/\/$/, '');
 
   return DISCORD_PROXY_PREFIXES.map((prefix) => ({
     prefix,
@@ -169,10 +165,10 @@ function createUrlMappings(serverHost: string): Array<{ prefix: string; target: 
 
 function normalizeServerHost(serverHost: string): string {
   const url = toUrl(serverHost);
-  const path = url.pathname === "/" ? "" : url.pathname.replace(/\/$/, "");
+  const path = url.pathname === '/' ? '' : url.pathname.replace(/\/$/, '');
   return `${url.protocol}//${url.host}${path}`;
 }
 
 function toUrl(host: string): URL {
-  return new URL(host.includes("://") ? host : `http://${host}`);
+  return new URL(host.includes('://') ? host : `http://${host}`);
 }

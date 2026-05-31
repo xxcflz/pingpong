@@ -1,16 +1,11 @@
+import { BALL_SPEED_MAX, COURT_HEIGHT, COURT_WIDTH, type PlayerSlot } from '@pingpong/shared';
 /**
  * Hud — score numerals, rally counter, speed gauge, status banner, AFK overlay.
  *
  * All visuals via Pixi Text + Graphics — no @pixi/ui, no images.
  * Every dimension references shared constants; no magic numbers.
  */
-import { Container, Graphics, Text, type TextOptions } from "pixi.js";
-import {
-  COURT_WIDTH,
-  COURT_HEIGHT,
-  BALL_SPEED_MAX,
-  type PlayerSlot,
-} from "@pingpong/shared";
+import { Container, Graphics, Text, type TextOptions } from 'pixi.js';
 
 /** Colors (design tokens). */
 const TEXT_WHITE = 0xff_ff_ff;
@@ -30,9 +25,7 @@ const FONT = "'Courier New', Courier, monospace";
 
 // ── Text helpers ─────────────────────────────────────────────────────────────
 
-function makeText(
-  opts: Pick<TextOptions, "text" | "style"> & { label?: string },
-): Text {
+function makeText(opts: Pick<TextOptions, 'text' | 'style'> & { label?: string }): Text {
   const t = new Text(opts);
   if (opts.label) t.label = opts.label;
   return t;
@@ -50,6 +43,9 @@ export interface HudNode {
   readonly banner: Text;
   readonly afkOverlay: Container;
   readonly leaveButton: Graphics;
+  readonly pauseMenu: Container;
+  readonly continueBtn: Graphics;
+  readonly exitBtn: Graphics;
   afkText: Text;
 }
 
@@ -59,17 +55,17 @@ export interface HudNode {
  */
 export function buildHud(): HudNode {
   const layer = new Container();
-  layer.label = "uiLayer";
+  layer.label = 'uiLayer';
 
   // ── Score — top (opponent) ────────────────────────────────────
   const scoreTop = makeText({
-    text: "0",
-    label: "score",
+    text: '0',
+    label: 'score',
     style: {
       fontFamily: FONT,
       fontSize: 64,
       fill: ACCENT_RED,
-      fontWeight: "bold",
+      fontWeight: 'bold',
     },
   });
   scoreTop.anchor.set(0.5);
@@ -79,13 +75,13 @@ export function buildHud(): HudNode {
 
   // ── Score — bottom (you) ─────────────────────────────────────
   const scoreBottom = makeText({
-    text: "0",
-    label: "score",
+    text: '0',
+    label: 'score',
     style: {
       fontFamily: FONT,
       fontSize: 64,
       fill: ACCENT_BLUE,
-      fontWeight: "bold",
+      fontWeight: 'bold',
     },
   });
   scoreBottom.anchor.set(0.5);
@@ -95,8 +91,8 @@ export function buildHud(): HudNode {
 
   // ── Rally counter ────────────────────────────────────────────
   const rallyText = makeText({
-    text: "Rally: 0",
-    label: "rally",
+    text: 'Rally: 0',
+    label: 'rally',
     style: {
       fontFamily: FONT,
       fontSize: 20,
@@ -109,19 +105,15 @@ export function buildHud(): HudNode {
   layer.addChild(rallyText);
 
   // ── Speed gauge background ───────────────────────────────────
-  const gaugeBg = new Graphics()
-    .roundRect(0, 0, GAUGE_WIDTH, GAUGE_HEIGHT, 4)
-    .fill(GAUGE_BG);
-  gaugeBg.label = "speedGaugeBg";
+  const gaugeBg = new Graphics().roundRect(0, 0, GAUGE_WIDTH, GAUGE_HEIGHT, 4).fill(GAUGE_BG);
+  gaugeBg.label = 'speedGaugeBg';
   gaugeBg.x = (COURT_WIDTH - GAUGE_WIDTH) / 2;
   gaugeBg.y = GAUGE_Y;
   layer.addChild(gaugeBg);
 
   // ── Speed gauge fill ─────────────────────────────────────────
-  const speedFill = new Graphics()
-    .roundRect(0, 0, GAUGE_WIDTH, GAUGE_HEIGHT, 4)
-    .fill(GAUGE_FILL);
-  speedFill.label = "speedGaugeFill";
+  const speedFill = new Graphics().roundRect(0, 0, GAUGE_WIDTH, GAUGE_HEIGHT, 4).fill(GAUGE_FILL);
+  speedFill.label = 'speedGaugeFill';
   speedFill.x = (COURT_WIDTH - GAUGE_WIDTH) / 2;
   speedFill.y = GAUGE_Y;
   speedFill.scale.x = 0; // starts empty
@@ -129,8 +121,8 @@ export function buildHud(): HudNode {
 
   // ── Speed label ──────────────────────────────────────────────
   const speedLabel = makeText({
-    text: "Speed",
-    label: "speedLabel",
+    text: 'Speed',
+    label: 'speedLabel',
     style: { fontFamily: FONT, fontSize: 14, fill: TEXT_DIM },
   });
   speedLabel.anchor.set(0.5);
@@ -140,14 +132,14 @@ export function buildHud(): HudNode {
 
   // ── Status banner (center of court) ──────────────────────────
   const banner = makeText({
-    text: "",
-    label: "statusBanner",
+    text: '',
+    label: 'statusBanner',
     style: {
       fontFamily: FONT,
       fontSize: 40,
       fill: TEXT_WHITE,
-      fontWeight: "bold",
-      align: "center",
+      fontWeight: 'bold',
+      align: 'center',
     },
   });
   banner.anchor.set(0.5);
@@ -163,20 +155,20 @@ export function buildHud(): HudNode {
   leaveButton.stroke({ color: 0xffffff, width: 2 });
   leaveButton.x = 680;
   leaveButton.y = 20;
-  leaveButton.label = "leaveButton";
-  leaveButton.eventMode = "static";
-  leaveButton.cursor = "pointer";
+  leaveButton.label = 'leaveButton';
+  leaveButton.eventMode = 'static';
+  leaveButton.cursor = 'pointer';
   layer.addChild(leaveButton);
 
   const leaveText = makeText({
-    text: "×",
-    label: "leaveText",
+    text: '×',
+    label: 'leaveText',
     style: {
       fontFamily: FONT,
       fontSize: 28,
-      fontWeight: "bold",
+      fontWeight: 'bold',
       fill: 0xffffff,
-      align: "center",
+      align: 'center',
     },
   });
   leaveText.anchor.set(0.5);
@@ -184,13 +176,92 @@ export function buildHud(): HudNode {
   leaveText.y = 15;
   leaveButton.addChild(leaveText);
 
+  // ── Pause menu (hidden by default) ────────────────────────────────────
+  const pauseMenu = new Container();
+  pauseMenu.label = 'pauseMenu';
+  pauseMenu.visible = false;
+  layer.addChild(pauseMenu);
+
+  const pauseBg = new Graphics()
+    .rect(0, 0, COURT_WIDTH, COURT_HEIGHT)
+    .fill({ color: 0x000000, alpha: 0.7 });
+  pauseBg.eventMode = 'static';
+  pauseMenu.addChild(pauseBg);
+
+  const pauseTitle = makeText({
+    text: 'PAUSED',
+    label: 'pauseTitle',
+    style: {
+      fontFamily: FONT,
+      fontSize: 48,
+      fill: TEXT_WHITE,
+      fontWeight: 'bold',
+      align: 'center',
+    },
+  });
+  pauseTitle.anchor.set(0.5);
+  pauseTitle.x = COURT_WIDTH / 2;
+  pauseTitle.y = COURT_HEIGHT / 2 - 80;
+  pauseMenu.addChild(pauseTitle);
+
+  const continueBtn = new Graphics();
+  continueBtn.roundRect(0, 0, 200, 60, 8);
+  continueBtn.fill(ACCENT_BLUE);
+  continueBtn.x = COURT_WIDTH / 2 - 100;
+  continueBtn.y = COURT_HEIGHT / 2 - 20;
+  continueBtn.label = 'continueBtn';
+  continueBtn.eventMode = 'static';
+  continueBtn.cursor = 'pointer';
+  pauseMenu.addChild(continueBtn);
+
+  const continueText = makeText({
+    text: 'Continue',
+    label: 'continueText',
+    style: {
+      fontFamily: FONT,
+      fontSize: 24,
+      fill: TEXT_WHITE,
+      fontWeight: 'bold',
+      align: 'center',
+    },
+  });
+  continueText.anchor.set(0.5);
+  continueText.x = 100;
+  continueText.y = 30;
+  continueBtn.addChild(continueText);
+
+  const exitBtn = new Graphics();
+  exitBtn.roundRect(0, 0, 200, 60, 8);
+  exitBtn.fill(0x666666);
+  exitBtn.x = COURT_WIDTH / 2 - 100;
+  exitBtn.y = COURT_HEIGHT / 2 + 60;
+  exitBtn.label = 'exitBtn';
+  exitBtn.eventMode = 'static';
+  exitBtn.cursor = 'pointer';
+  pauseMenu.addChild(exitBtn);
+
+  const exitText = makeText({
+    text: 'Return to Lobby',
+    label: 'exitText',
+    style: {
+      fontFamily: FONT,
+      fontSize: 20,
+      fill: TEXT_WHITE,
+      align: 'center',
+    },
+  });
+  exitText.anchor.set(0.5);
+  exitText.x = 100;
+  exitText.y = 30;
+  exitBtn.addChild(exitText);
+
   // ── AFK overlay (hidden by default — populated by showAfk) ────────────
   const afkOverlay = new Container();
-  afkOverlay.label = "afkOverlay";
+  afkOverlay.label = 'afkOverlay';
   afkOverlay.visible = false;
   layer.addChild(afkOverlay);
 
-  const afkText = new Text({ text: "" });
+  const afkText = new Text({ text: '' });
   afkText.visible = false;
 
   return {
@@ -202,6 +273,9 @@ export function buildHud(): HudNode {
     speedLabel,
     banner,
     leaveButton,
+    pauseMenu,
+    continueBtn,
+    exitBtn,
     afkOverlay,
     afkText,
   };
@@ -250,26 +324,28 @@ export function setBanner(hud: HudNode, text: string): void {
  * Call `setAfkPulse(hud, alpha)` each frame for 1 Hz pulsing.
  */
 export function showAfk(hud: HudNode, slot: PlayerSlot, secondsRemaining: number): void {
-  hud.afkOverlay.removeChildren().forEach(c => c.destroy());
+  for (const c of hud.afkOverlay.removeChildren()) {
+    c.destroy();
+  }
 
   const halfH = COURT_HEIGHT / 2;
-  const yOffset = slot === "top" ? 0 : halfH;
+  const yOffset = slot === 'top' ? 0 : halfH;
 
   const afkBg = new Graphics()
     .rect(0, yOffset, COURT_WIDTH, halfH)
     .fill({ color: ACCENT_RED, alpha: 0.35 });
-  afkBg.label = "afkBgRect";
+  afkBg.label = 'afkBgRect';
   hud.afkOverlay.addChild(afkBg);
 
   const afkText = makeText({
     text: `AFK Warning\n${secondsRemaining}s remaining`,
-    label: "afkText",
+    label: 'afkText',
     style: {
       fontFamily: FONT,
       fontSize: 32,
       fill: TEXT_WHITE,
-      fontWeight: "bold",
-      align: "center",
+      fontWeight: 'bold',
+      align: 'center',
     },
   });
   afkText.anchor.set(0.5);
@@ -286,7 +362,7 @@ export function showAfk(hud: HudNode, slot: PlayerSlot, secondsRemaining: number
  * `alpha` should oscillate between ~0.2 and ~0.7.
  */
 export function setAfkPulse(hud: HudNode, alpha: number): void {
-  const bg = hud.afkOverlay.getChildByLabel?.("afkBgRect") as Graphics | undefined;
+  const bg = hud.afkOverlay.getChildByLabel?.('afkBgRect') as Graphics | undefined;
   if (bg) bg.alpha = alpha;
 }
 
@@ -295,16 +371,22 @@ export function hideAfk(hud: HudNode): void {
   hud.afkOverlay.visible = false;
 }
 
+/** Show the pause menu. */
+export function showPauseMenu(hud: HudNode): void {
+  hud.pauseMenu.visible = true;
+}
+
+/** Hide the pause menu. */
+export function hidePauseMenu(hud: HudNode): void {
+  hud.pauseMenu.visible = false;
+}
+
 /**
  * Flash a score numeral (scale bump animation).
  * `side` = 'top' | 'bottom'.
  */
-export function flashScore(
-  hud: HudNode,
-  side: "top" | "bottom",
-  elapsed: number,
-): void {
-  const target = side === "top" ? hud.scoreTop : hud.scoreBottom;
+export function flashScore(hud: HudNode, side: 'top' | 'bottom', elapsed: number): void {
+  const target = side === 'top' ? hud.scoreTop : hud.scoreBottom;
   // Simple scale pulse: 1.5 → 1.0 over 300ms
   const t = Math.min(elapsed / 300, 1);
   const scale = 1 + 0.5 * (1 - t);

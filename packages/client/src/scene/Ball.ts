@@ -1,10 +1,10 @@
+import { BALL_RADIUS } from '@pingpong/shared';
 /**
  * Ball — clean white circle, no trail.
  *
  * Pixi v8 chained Graphics API.
  */
-import { Container, Graphics } from "pixi.js";
-import { BALL_RADIUS } from "@pingpong/shared";
+import { Container, Graphics } from 'pixi.js';
 
 /** White ball color. */
 const BALL_COLOR = 0xff_ff_ff;
@@ -23,12 +23,10 @@ export interface BallNode {
  */
 export function createBall(): BallNode {
   const container = new Container();
-  container.label = "ball";
+  container.label = 'ball';
 
-  const ball = new Graphics()
-    .circle(0, 0, BALL_RADIUS)
-    .fill(BALL_COLOR);
-  ball.label = "ballGfx";
+  const ball = new Graphics().circle(0, 0, BALL_RADIUS).fill(BALL_COLOR);
+  ball.label = 'ballGfx';
   container.addChild(ball);
 
   return { container, ball };
@@ -38,11 +36,7 @@ export function createBall(): BallNode {
  * Update ball position from current state.
  * Call once per frame.
  */
-export function updateBall(
-  node: BallNode,
-  x: number,
-  y: number,
-): void {
+export function updateBall(node: BallNode, x: number, y: number): void {
   node.ball.x = x;
   node.ball.y = y;
   node.container.x = 0;

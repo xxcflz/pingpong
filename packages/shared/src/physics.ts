@@ -14,8 +14,8 @@ import {
   PADDLE_HEIGHT,
   SPIN_DECAY,
   SPIN_FROM_PADDLE_VELOCITY,
-} from "./constants.js";
-import type { BallState, PaddleState, Vec2 } from "./types.js";
+} from './constants.js';
+import type { BallState, PaddleState, Vec2 } from './types.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -88,10 +88,7 @@ export function clampPaddle(paddle: PaddleState): PaddleState {
  * AABB collision between ball and paddle.
  * Returns `true` if the ball overlaps the paddle rectangle.
  */
-export function collidePaddleAabb(
-  ball: BallState,
-  paddle: PaddleState,
-): boolean {
+export function collidePaddleAabb(ball: BallState, paddle: PaddleState): boolean {
   const halfW = paddle.width / 2;
   const halfH = paddle.height / 2;
 
@@ -131,10 +128,7 @@ export function collideWalls(ball: BallState): BallState {
  * Transfer paddle tangential velocity to ball spin on contact.
  * Spin is imparted based on paddle's horizontal velocity component.
  */
-export function applySpinFromPaddle(
-  ball: BallState,
-  paddle: PaddleState,
-): BallState {
+export function applySpinFromPaddle(ball: BallState, paddle: PaddleState): BallState {
   // Paddle horizontal velocity → spin (positive vel.x → positive spin)
   const newSpin = ball.spin + paddle.vel.x * SPIN_FROM_PADDLE_VELOCITY;
   return { ...ball, spin: newSpin };
@@ -146,11 +140,7 @@ export function applySpinFromPaddle(
  * Max deflection angle is 60° from vertical.
  * Returns a NEW ball with updated velocity.
  */
-export function reflectOffPaddle(
-  ball: BallState,
-  paddle: PaddleState,
-  dirY: number,
-): BallState {
+export function reflectOffPaddle(ball: BallState, paddle: PaddleState, dirY: number): BallState {
   const offset = (ball.pos.x - paddle.pos.x) / (paddle.width / 2);
   const clampedOffset = clamp(offset, -1, 1);
   const maxAngle = Math.PI / 3;
@@ -159,10 +149,7 @@ export function reflectOffPaddle(
   if (speed === 0) return ball;
   return {
     ...ball,
-    vel: vec2(
-      Math.sin(angle) * speed,
-      dirY * Math.cos(angle) * speed,
-    ),
+    vel: vec2(Math.sin(angle) * speed, dirY * Math.cos(angle) * speed),
   };
 }
 
@@ -188,5 +175,4 @@ export function accelerateOnRally(ball: BallState): BallState {
 export const MAX_BALL_DISPLACEMENT_PER_TICK = BALL_SPEED_MAX / 60; // uses default TICK_RATE_HZ
 
 /** Safety margin: PADDLE_HEIGHT - max_displacement_per_tick. */
-export const ANTI_TUNNELING_MARGIN_PX =
-  PADDLE_HEIGHT - BALL_SPEED_MAX / 60;
+export const ANTI_TUNNELING_MARGIN_PX = PADDLE_HEIGHT - BALL_SPEED_MAX / 60;

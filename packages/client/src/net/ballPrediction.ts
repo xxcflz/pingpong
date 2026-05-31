@@ -7,21 +7,21 @@
  * Pure data — no Pixi, no DOM.
  */
 import {
-  stepBall,
-  applyMagnus,
-  decaySpin,
-  collidePaddleAabb,
-  collideWalls,
-  applySpinFromPaddle,
-  accelerateOnRally,
-  COURT_HEIGHT,
-  COURT_WIDTH,
   BALL_RADIUS,
   BALL_SPEED_INITIAL,
   type BallState,
+  COURT_HEIGHT,
+  COURT_WIDTH,
   type PaddleState,
   type Vec2,
-} from "@pingpong/shared";
+  accelerateOnRally,
+  applyMagnus,
+  applySpinFromPaddle,
+  collidePaddleAabb,
+  collideWalls,
+  decaySpin,
+  stepBall,
+} from '@pingpong/shared';
 
 /** Maximum correction distance before snapping (instead of blending). */
 const MAX_CORRECTION_PX = 80;
@@ -43,7 +43,7 @@ export interface BallPredictionEngine {
   reset(ball: BallState): void;
 
   /** Check if a score event should have occurred (ball out of bounds). */
-  checkScore(): "top" | "bottom" | null;
+  checkScore(): 'top' | 'bottom' | null;
 }
 
 export function createBallPredictionEngine(): BallPredictionEngine {
@@ -155,12 +155,12 @@ export function createBallPredictionEngine(): BallPredictionEngine {
     correctionActive = false;
   }
 
-  function checkScore(): "top" | "bottom" | null {
+  function checkScore(): 'top' | 'bottom' | null {
     if (predicted.pos.y - predicted.radius > COURT_HEIGHT) {
-      return "top";
+      return 'top';
     }
     if (predicted.pos.y + predicted.radius < 0) {
-      return "bottom";
+      return 'bottom';
     }
     return null;
   }

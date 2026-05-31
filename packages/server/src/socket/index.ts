@@ -1,24 +1,24 @@
+import crypto from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
+import type { PlayerSlot } from '@pingpong/shared';
 import { Server, type Socket } from 'socket.io';
-import { log } from '../util/logger.js';
-import { room, type PaddleInput } from '../game/room.js';
+import { db } from '../db/index.js';
+import { createMatch, upsertUserByDiscordId } from '../db/repos.js';
+import { cancelPendingResets, finishMatch } from '../game/finish.js';
 import { startLoop, stopLoop } from '../game/loop.js';
-import { finishMatch } from '../game/finish.js';
-import { authenticateSocket, type AuthenticatedUser } from '../lobby/auth.js';
-import { AI_USER_ID, AI_USERNAME, lobby } from '../lobby/state.js';
+import { type PaddleInput, room } from '../game/room.js';
+import { afkTracker } from '../lobby/afk.js';
+import { type AuthenticatedUser, authenticateSocket } from '../lobby/auth.js';
 import {
-  recordDisconnect,
   attemptReconnect,
-  isSlotReserved,
   getReservedSlotOwner,
+  isSlotReserved,
+  recordDisconnect,
   setReconnectCallbacks,
 } from '../lobby/reconnect.js';
-import { db } from '../db/index.js';
-import { upsertUserByDiscordId, createMatch } from '../db/repos.js';
+import { AI_USERNAME, AI_USER_ID, lobby } from '../lobby/state.js';
+import { log } from '../util/logger.js';
 import { attachSpectateNamespace } from './spectate.js';
-import { afkTracker } from '../lobby/afk.js';
-import type { PlayerSlot } from '@pingpong/shared';
-import crypto from 'node:crypto';
 
 let io: Server | undefined;
 
@@ -47,13 +47,15 @@ export function attachSocket(httpServer: HttpServer, clientOrigin: string): Serv
       io?.emit('countdownTick', { t: 'countdownTick', remaining });
     },
     onCountdownComplete: (topDiscordId, bottomDiscordId) => {
+      cancelPendingResets();
       const topUser = upsertUserByDiscordId(db, {
         discordId: topDiscordId,
         username: topDiscordId === AI_USER_ID ? AI_USERNAME : `player_${topDiscordId.slice(0, 8)}`,
       });
       const bottomUser = upsertUserByDiscordId(db, {
         discordId: bottomDiscordId,
-        username: bottomDiscordId === AI_USER_ID ? AI_USERNAME : `player_${bottomDiscordId.slice(0, 8)}`,
+        username:
+          bottomDiscordId === AI_USER_ID ? AI_USERNAME : `player_${bottomDiscordId.slice(0, 8)}`,
       });
 
       const matchId = crypto.randomUUID();
@@ -64,15 +66,19 @@ export function attachSocket(httpServer: HttpServer, clientOrigin: string): Serv
       });
 
       room.startMatch(topDiscordId, bottomDiscordId);
-      room.setMatchContext(matchRow.id, {
-        dbId: topUser.id,
-        username: topUser.username,
-        avatarUrl: topUser.avatar,
-      }, {
-        dbId: bottomUser.id,
-        username: bottomUser.username,
-        avatarUrl: bottomUser.avatar,
-      });
+      room.setMatchContext(
+        matchRow.id,
+        {
+          dbId: topUser.id,
+          username: topUser.username,
+          avatarUrl: topUser.avatar,
+        },
+        {
+          dbId: bottomUser.id,
+          username: bottomUser.username,
+          avatarUrl: bottomUser.avatar,
+        },
+      );
 
       afkTracker.init(['top', 'bottom']);
       startLoop(room);
@@ -82,7 +88,11 @@ export function attachSocket(httpServer: HttpServer, clientOrigin: string): Serv
         matchId,
         players: {
           top: { id: topDiscordId, username: topUser.username, avatarUrl: topUser.avatar },
-          bottom: { id: bottomDiscordId, username: bottomUser.username, avatarUrl: bottomUser.avatar },
+          bottom: {
+            id: bottomDiscordId,
+            username: bottomUser.username,
+            avatarUrl: bottomUser.avatar,
+          },
         },
       });
 
@@ -140,7 +150,9 @@ export function attachSocket(httpServer: HttpServer, clientOrigin: string): Serv
               }
             });
 
-            log.info(`[ws] reconnected (test mode): ${socket.id} userId=${user.id} slot=${reconnectInfo.slot}`);
+            log.info(
+              `[ws] reconnected (test mode): ${socket.id} userId=${user.id} slot=${reconnectInfo.slot}`,
+            );
             return;
           }
         }
@@ -152,12 +164,15 @@ export function attachSocket(httpServer: HttpServer, clientOrigin: string): Serv
         }
         log.info(`[ws] player ${slot} registered (test mode): ${socket.id} userId=${userId}`);
 
-        if (room.getPlayerSocketId('top') && room.getPlayerSocketId('bottom')) {
+        const topSocket = room.getPlayerSocketId('top');
+        const bottomSocket = room.getPlayerSocketId('bottom');
+        if (topSocket && bottomSocket) {
           if (room.state.phase === 'waiting') {
-            room.startMatch(
-              lobby.getSlots().top ?? room.getPlayerSocketId('top')!,
-              lobby.getSlots().bottom ?? room.getPlayerSocketId('bottom')!,
-            );
+            const topSlot = lobby.getSlots().top;
+            const bottomSlot = lobby.getSlots().bottom;
+            if (!topSlot || !bottomSlot) return;
+
+            room.startMatch(topSlot, bottomSlot);
             afkTracker.init(['top', 'bottom']);
             startLoop(room);
             log.info('[ws] match started (test mode)');
@@ -263,7 +278,7 @@ export function attachSocket(httpServer: HttpServer, clientOrigin: string): Serv
 
     socket.on('leaveGame', () => {
       const phase = lobby.getPhase();
-      if (phase !== 'playing') {
+      if (phase !== 'playing' && phase !== 'paused') {
         log.warn(`[ws] leaveGame ignored: user=${user.id} phase=${phase}`);
         return;
       }
@@ -275,7 +290,9 @@ export function attachSocket(httpServer: HttpServer, clientOrigin: string): Serv
       }
 
       const winnerSlot: PlayerSlot = slot === 'top' ? 'bottom' : 'top';
-      log.info(`[ws] leaveGame: user=${user.id} slot=${slot} → forfeit_leave, winner=${winnerSlot}`);
+      log.info(
+        `[ws] leaveGame: user=${user.id} slot=${slot} → forfeit_leave, winner=${winnerSlot}`,
+      );
 
       finishMatch(room, {
         endReason: 'forfeit_leave',
@@ -304,7 +321,13 @@ export function attachSocket(httpServer: HttpServer, clientOrigin: string): Serv
       if (isAiMatch && humanRequested) {
         log.info(`[ws] AI rematch accepted: ${user.id} → starting new match`);
         lobby.startRematchCountdown();
-      } else if (!isAiMatch && topUser && bottomUser && rematchRequests.has(topUser) && rematchRequests.has(bottomUser)) {
+      } else if (
+        !isAiMatch &&
+        topUser &&
+        bottomUser &&
+        rematchRequests.has(topUser) &&
+        rematchRequests.has(bottomUser)
+      ) {
         log.info(`[ws] rematch accepted: ${topUser} + ${bottomUser} → starting new match`);
         lobby.startRematchCountdown();
       } else {
@@ -348,9 +371,7 @@ export function getIO(): Server {
 function emitResumeAndSnapshot(socket: Socket): void {
   socket.emit('resume', { t: 'resume' });
 
-  const ballSpeed = Math.sqrt(
-    room.state.ball.vel.x ** 2 + room.state.ball.vel.y ** 2,
-  );
+  const ballSpeed = Math.sqrt(room.state.ball.vel.x ** 2 + room.state.ball.vel.y ** 2);
   socket.emit('stateSnapshot', {
     t: 'stateSnapshot',
     tick: room.state.tick,

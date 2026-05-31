@@ -1,5 +1,5 @@
-import type { Socket } from "socket.io";
-import { log } from "../util/logger.js";
+import type { Socket } from 'socket.io';
+import { log } from '../util/logger.js';
 
 export interface AuthenticatedUser {
   id: string;
@@ -7,7 +7,7 @@ export interface AuthenticatedUser {
   avatar: string | null;
 }
 
-const DISCORD_API = "https://discord.com/api/v10";
+const DISCORD_API = 'https://discord.com/api/v10';
 
 const userCache = new Map<string, { user: AuthenticatedUser; cachedAt: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -19,7 +19,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
  * socket handshake auth payload instead of calling Discord.
  */
 export async function authenticateSocket(socket: Socket): Promise<AuthenticatedUser | null> {
-  if (process.env.TEST_AUTH_BYPASS === "1") {
+  if (process.env.TEST_AUTH_BYPASS === '1') {
     return authenticateTestMode(socket);
   }
 
@@ -31,7 +31,7 @@ function authenticateTestMode(socket: Socket): AuthenticatedUser | null {
   const testUsername = socket.handshake.auth?.test_username as string | undefined;
 
   if (!testUserId || !testUsername) {
-    log.warn("[auth] TEST_AUTH_BYPASS=1 but missing test_user_id or test_username");
+    log.warn('[auth] TEST_AUTH_BYPASS=1 but missing test_user_id or test_username');
     return null;
   }
 
@@ -47,7 +47,7 @@ function authenticateTestMode(socket: Socket): AuthenticatedUser | null {
 async function authenticateDiscord(socket: Socket): Promise<AuthenticatedUser | null> {
   const token = socket.handshake.auth?.token as string | undefined;
   if (!token) {
-    log.warn("[auth] no token in handshake auth");
+    log.warn('[auth] no token in handshake auth');
     return null;
   }
 
@@ -83,7 +83,7 @@ async function authenticateDiscord(socket: Socket): Promise<AuthenticatedUser | 
     socket.data.user = user;
     return user;
   } catch (err) {
-    log.error("[auth] Discord API error", err);
+    log.error('[auth] Discord API error', err);
     return null;
   }
 }

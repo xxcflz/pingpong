@@ -1,16 +1,16 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Fastify from 'fastify';
-import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
+import cors from '@fastify/cors';
 import dotenv from 'dotenv';
+import Fastify from 'fastify';
+import { runMigrations } from './db/index.js';
 import { loadEnv } from './env.js';
-import { attachSocket } from './socket/index.js';
-import oauthRoutes from './http/oauth.js';
 import debugRoutes from './http/debug.js';
 import matchRoutes from './http/matches.js';
+import oauthRoutes from './http/oauth.js';
+import { attachSocket } from './socket/index.js';
 import { log } from './util/logger.js';
-import { runMigrations } from './db/index.js';
 
 // Load .env from monorepo root (two levels up from src/)
 const __dirname = dirname(fileURLToPath(import.meta.url));

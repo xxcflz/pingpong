@@ -1,6 +1,6 @@
-import { Container, Text, type TextOptions } from "pixi.js";
-import { COURT_WIDTH, type MatchSummary, type UserSummary } from "@pingpong/shared";
-import { SERVER_HOST } from "../env";
+import { COURT_WIDTH, type MatchSummary, type UserSummary } from '@pingpong/shared';
+import { Container, Text, type TextOptions } from 'pixi.js';
+import { SERVER_HOST } from '../env';
 
 const FONT = "'Courier New', Courier, monospace";
 const TEXT_WHITE = 0xff_ff_ff;
@@ -11,9 +11,7 @@ const MAX_ROWS = 5;
 const ROW_HEIGHT = 28;
 const WIDGET_WIDTH = COURT_WIDTH - 40;
 
-function makeText(
-  opts: Pick<TextOptions, "text" | "style"> & { label?: string },
-): Text {
+function makeText(opts: Pick<TextOptions, 'text' | 'style'> & { label?: string }): Text {
   const t = new Text(opts);
   if (opts.label) t.label = opts.label;
   return t;
@@ -41,25 +39,25 @@ export interface HistoryWidgetNode {
 
 export function buildHistoryWidget(): HistoryWidgetNode {
   const container = new Container();
-  container.label = "historyWidget";
+  container.label = 'historyWidget';
   container.x = 20;
   container.y = 20;
 
   const header = makeText({
-    text: "Recent matches",
-    label: "historyHeader",
+    text: 'Recent matches',
+    label: 'historyHeader',
     style: {
       fontFamily: FONT,
       fontSize: 22,
       fill: TEXT_WHITE,
-      fontWeight: "bold",
+      fontWeight: 'bold',
     },
   });
   container.addChild(header);
 
   const emptyText = makeText({
-    text: "No matches yet — play your first!",
-    label: "historyEmpty",
+    text: 'No matches yet — play your first!',
+    label: 'historyEmpty',
     style: { fontFamily: FONT, fontSize: 16, fill: TEXT_DIM },
   });
   emptyText.y = 30;
@@ -67,7 +65,7 @@ export function buildHistoryWidget(): HistoryWidgetNode {
   container.addChild(emptyText);
 
   const rowsContainer = new Container();
-  rowsContainer.label = "historyRows";
+  rowsContainer.label = 'historyRows';
   rowsContainer.y = 30;
   container.addChild(rowsContainer);
 
@@ -98,8 +96,7 @@ export function buildHistoryWidget(): HistoryWidgetNode {
         row.y = i * ROW_HEIGHT;
         rowsContainer.addChild(row);
       }
-    } catch (err) {
-    }
+    } catch (err) {}
   }
 
   function setVisible(visible: boolean): void {
@@ -113,22 +110,21 @@ function buildMatchRow(match: HistoryMatch, currentUserId: string): Container {
   const row = new Container();
 
   const isBottom = match.players.bottom.id === currentUserId;
-  const mySlot: "top" | "bottom" = isBottom ? "bottom" : "top";
+  const mySlot: 'top' | 'bottom' = isBottom ? 'bottom' : 'top';
   const won = match.winner === mySlot;
 
-  const opponent: UserSummary =
-    mySlot === "bottom" ? match.players.top : match.players.bottom;
+  const opponent: UserSummary = mySlot === 'bottom' ? match.players.top : match.players.bottom;
 
   const myScore = match.score[mySlot];
-  const theirScore = match.score[mySlot === "bottom" ? "top" : "bottom"];
+  const theirScore = match.score[mySlot === 'bottom' ? 'top' : 'bottom'];
 
   const badge = makeText({
-    text: won ? "W" : "L",
+    text: won ? 'W' : 'L',
     style: {
       fontFamily: FONT,
       fontSize: 16,
       fill: won ? WIN_GREEN : LOSS_RED,
-      fontWeight: "bold",
+      fontWeight: 'bold',
     },
   });
   badge.x = 0;

@@ -6,35 +6,38 @@
  */
 
 import {
-  stepBall,
+  BALL_RADIUS,
+  BALL_SPEED_INITIAL,
+  BROADCAST_HZ_PLAYER,
+  BROADCAST_HZ_SPECTATOR,
+  type BallState,
+  COURT_HEIGHT,
+  COURT_WIDTH,
+  type EndReason,
+  type MatchState,
+  PADDLE_HEIGHT,
+  PADDLE_MAX_SPEED,
+  PADDLE_WIDTH,
+  type PaddleState,
+  type PlayerSlot,
+  SCORE_TO_WIN,
+  TICK_RATE_HZ,
+  accelerateOnRally,
   applyMagnus,
-  decaySpin,
+  applySpinFromPaddle,
   clampPaddle,
   collidePaddleAabb,
   collideWalls,
-  applySpinFromPaddle,
-  accelerateOnRally,
+  decaySpin,
   reflectOffPaddle,
-  COURT_WIDTH,
-  COURT_HEIGHT,
-  PADDLE_WIDTH,
-  PADDLE_HEIGHT,
-  PADDLE_MAX_SPEED,
-  BALL_RADIUS,
-  BALL_SPEED_INITIAL,
-  SCORE_TO_WIN,
-  TICK_RATE_HZ,
-  BROADCAST_HZ_PLAYER,
-  BROADCAST_HZ_SPECTATOR,
-  type PlayerSlot,
-  type MatchState,
-  type EndReason,
-  type BallState,
-  type PaddleState,
-} from "@pingpong/shared";
+  stepBall,
+} from '@pingpong/shared';
 
 const PLAYER_SNAPSHOT_INTERVAL_TICKS = Math.max(1, Math.round(TICK_RATE_HZ / BROADCAST_HZ_PLAYER));
-const SPECTATOR_SNAPSHOT_INTERVAL_TICKS = Math.max(1, Math.round(TICK_RATE_HZ / BROADCAST_HZ_SPECTATOR));
+const SPECTATOR_SNAPSHOT_INTERVAL_TICKS = Math.max(
+  1,
+  Math.round(TICK_RATE_HZ / BROADCAST_HZ_SPECTATOR),
+);
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -127,7 +130,7 @@ export class Room {
 
     this.state = {
       tick: 0,
-      phase: "waiting",
+      phase: 'waiting',
       ball: {
         pos: { x: COURT_WIDTH / 2, y: COURT_HEIGHT / 2 },
         vel: { x: 0, y: BALL_SPEED_INITIAL },
@@ -169,7 +172,7 @@ export class Room {
 
     this.state = {
       tick: 0,
-      phase: "playing",
+      phase: 'playing',
       ball: this.freshBall(),
       paddles: this.state.paddles,
       score: { top: 0, bottom: 0 },
@@ -198,15 +201,15 @@ export class Room {
    * Loop should be stopped by the caller before or after this.
    */
   endMatch(reason: EndReason, winner?: PlayerSlot): void {
-    if (this.state.phase === "finished") return;
+    if (this.state.phase === 'finished') return;
 
-    this.state = { ...this.state, phase: "finished", serverTimeMs: Date.now() };
+    this.state = { ...this.state, phase: 'finished', serverTimeMs: Date.now() };
 
-    const winnerSide = winner ?? "top";
+    const winnerSide = winner ?? 'top';
     this.pendingEvents.push({
-      name: "matchEnd",
+      name: 'matchEnd',
       data: {
-        t: "matchEnd",
+        t: 'matchEnd',
         winnerSide,
         scoreA: this.state.score.top,
         scoreB: this.state.score.bottom,
@@ -233,7 +236,7 @@ export class Room {
 
     this.state = {
       tick: 0,
-      phase: "waiting",
+      phase: 'waiting',
       ball: {
         pos: { x: COURT_WIDTH / 2, y: COURT_HEIGHT / 2 },
         vel: { x: 0, y: BALL_SPEED_INITIAL },
@@ -262,11 +265,7 @@ export class Room {
     this.playerSockets.clear();
   }
 
-  setMatchContext(
-    matchId: number,
-    top: PlayerMeta,
-    bottom: PlayerMeta,
-  ): void {
+  setMatchContext(matchId: number, top: PlayerMeta, bottom: PlayerMeta): void {
     this.currentMatchId = matchId;
     this.playerMeta = { top, bottom };
   }
@@ -278,26 +277,27 @@ export class Room {
    * Collects events in pendingEvents — caller must drainEvents() after.
    */
   tick(dt: number): PlayerSlot | undefined {
-    if (this.state.phase !== "playing") return undefined;
+    if (this.state.phase !== 'playing') return undefined;
 
     // ── 1. Drain & validate inputs ──────────────────────────────────────
-    for (const slot of ["top", "bottom"] as PlayerSlot[]) {
+    for (const slot of ['top', 'bottom'] as PlayerSlot[]) {
       const inputs = this.inputBuffer.get(slot);
       if (inputs && inputs.length > 0) {
         // Use the latest input
-        const latest = inputs[inputs.length - 1]!;
-        const prevX = this.state.paddles[slot]!.pos.x;
+        const latest = inputs[inputs.length - 1];
+        if (!latest) continue;
+        const prevX = this.state.paddles[slot]?.pos.x;
         const dx = latest.paddleX - prevX;
         const elapsedTicks = Math.max(1, this.tickCount - this.lastInputTick[slot]);
         const elapsedSeconds = elapsedTicks * dt;
         const maxDx = PADDLE_MAX_SPEED * elapsedSeconds;
-        const nextX = Math.abs(dx) > maxDx
-          ? prevX + Math.sign(dx) * maxDx
-          : latest.paddleX;
+        const nextX = Math.abs(dx) > maxDx ? prevX + Math.sign(dx) * maxDx : latest.paddleX;
 
+        const currentPaddle = this.state.paddles[slot];
+        if (!currentPaddle) continue;
         const updated = clampPaddle({
-          ...this.state.paddles[slot]!,
-          pos: { x: nextX, y: this.state.paddles[slot]!.pos.y },
+          ...currentPaddle,
+          pos: { x: nextX, y: currentPaddle.pos.y },
           vel: { x: 0, y: 0 },
         });
         this.state = {
@@ -316,8 +316,9 @@ export class Room {
     ball = decaySpin(ball);
 
     // ── 3. Paddle collisions ────────────────────────────────────────────
-    const topPaddle = this.state.paddles.top!;
-    const bottomPaddle = this.state.paddles.bottom!;
+    const topPaddle = this.state.paddles.top;
+    const bottomPaddle = this.state.paddles.bottom;
+    if (!topPaddle || !bottomPaddle) return undefined;
 
     // Top paddle: only collide if ball is moving upward
     if (collidePaddleAabb(ball, topPaddle) && ball.vel.y < 0) {
@@ -350,15 +351,15 @@ export class Room {
       this.state = {
         ...this.state,
         score: newScore,
-        ball: this.resetBall("bottom"),
+        ball: this.resetBall('bottom'),
         serverTimeMs: Date.now(),
       };
       this.pendingEvents.push({
-        name: "scoreEvent",
-        data: { t: "scoreEvent", side: "top", score: newScore, reason: "goal" },
+        name: 'scoreEvent',
+        data: { t: 'scoreEvent', side: 'top', score: newScore, reason: 'goal' },
       });
       if (newScore.top >= SCORE_TO_WIN) {
-        return "top";
+        return 'top';
       }
     } else if (ball.pos.y + ball.radius < 0) {
       // Ball past top → bottom player scores
@@ -369,15 +370,15 @@ export class Room {
       this.state = {
         ...this.state,
         score: newScore,
-        ball: this.resetBall("top"),
+        ball: this.resetBall('top'),
         serverTimeMs: Date.now(),
       };
       this.pendingEvents.push({
-        name: "scoreEvent",
-        data: { t: "scoreEvent", side: "bottom", score: newScore, reason: "goal" },
+        name: 'scoreEvent',
+        data: { t: 'scoreEvent', side: 'bottom', score: newScore, reason: 'goal' },
       });
       if (newScore.bottom >= SCORE_TO_WIN) {
-        return "bottom";
+        return 'bottom';
       }
     }
 
@@ -389,11 +390,14 @@ export class Room {
     // This avoids oscillation from zeroing velocity on ticks with no input.
     // Clients use vel.x to extrapolate paddle position between snapshots.
     const newPaddles = { ...this.state.paddles };
-    for (const slot of ["top", "bottom"] as PlayerSlot[]) {
-      const prevX = this.lastPaddleX[slot]!;
-      const currX = newPaddles[slot]!.pos.x;
+    for (const slot of ['top', 'bottom'] as PlayerSlot[]) {
+      const prevX = this.lastPaddleX[slot];
+      const currX = newPaddles[slot]?.pos.x;
+      if (prevX === undefined || currX === undefined) continue;
       const velX = (currX - prevX) / dt;
-      newPaddles[slot] = { ...newPaddles[slot]!, vel: { x: velX, y: 0 } };
+      const paddle = newPaddles[slot];
+      if (!paddle) continue;
+      newPaddles[slot] = { ...paddle, vel: { x: velX, y: 0 } };
       this.lastPaddleX[slot] = currX;
     }
     this.state = { ...this.state, paddles: newPaddles };
@@ -413,9 +417,9 @@ export class Room {
           this.state.ball.vel.y * this.state.ball.vel.y,
       );
       this.pendingEvents.push({
-        name: "stateSnapshot",
+        name: 'stateSnapshot',
         data: {
-          t: "stateSnapshot",
+          t: 'stateSnapshot',
           tick: this.state.tick,
           lastProcessedSeq: { ...this.lastProcessedSeq },
           ball: this.state.ball,
@@ -442,7 +446,7 @@ export class Room {
     if (!this.inputBuffer.has(slot)) {
       this.inputBuffer.set(slot, []);
     }
-    this.inputBuffer.get(slot)!.push(input);
+    this.inputBuffer.get(slot)?.push(input);
   }
 
   // ── Event drain (called by loop after each tick) ────────────────────────
@@ -478,7 +482,9 @@ export class Room {
   getTickRateHz(): number {
     const now = performance.now();
     const cutoff = now - 1000;
-    while (this.tickTimestamps.length > 0 && this.tickTimestamps[0]! < cutoff) {
+    while (this.tickTimestamps.length > 0) {
+      const first = this.tickTimestamps[0];
+      if (first === undefined || first >= cutoff) break;
       this.tickTimestamps.shift();
     }
     return this.tickTimestamps.length;
@@ -511,7 +517,7 @@ export class Room {
   private resetBall(toward: PlayerSlot): BallState {
     const maxAngle = Math.PI / 6; // ±30°
     const angle = (Math.random() * 2 - 1) * maxAngle;
-    const dirY = toward === "bottom" ? 1 : -1;
+    const dirY = toward === 'bottom' ? 1 : -1;
     return {
       pos: { x: COURT_WIDTH / 2, y: COURT_HEIGHT / 2 },
       vel: {

@@ -1,11 +1,11 @@
+import { COURT_HEIGHT, COURT_WIDTH } from '@pingpong/shared';
 /**
  * Court — background layer: solid fill, dashed center net, boundary outline.
  *
  * Pixi v8 chained Graphics API only.
  * All dimensions/colors from @pingpong/shared constants — zero magic numbers.
  */
-import { Container, Graphics } from "pixi.js";
-import { COURT_WIDTH, COURT_HEIGHT } from "@pingpong/shared";
+import { Container, Graphics } from 'pixi.js';
 
 /** Dashed line segment length and gap (px). */
 const DASH_LEN = 12;
@@ -22,18 +22,16 @@ const BOUNDARY_COLOR = 0x1a_2a_3a;
  */
 export function buildCourt(): Container {
   const layer = new Container();
-  layer.label = "bgLayer";
+  layer.label = 'bgLayer';
 
   // ── Court fill ──────────────────────────────────────────────────
-  const bg = new Graphics()
-    .rect(0, 0, COURT_WIDTH, COURT_HEIGHT)
-    .fill(COURT_BG);
-  bg.label = "courtBg";
+  const bg = new Graphics().rect(0, 0, COURT_WIDTH, COURT_HEIGHT).fill(COURT_BG);
+  bg.label = 'courtBg';
   layer.addChild(bg);
 
   // ── Dashed center net ──────────────────────────────────────────
   const net = new Graphics();
-  net.label = "centerNet";
+  net.label = 'centerNet';
   const midY = COURT_HEIGHT / 2;
   let x = 0;
   while (x < COURT_WIDTH) {
@@ -48,7 +46,7 @@ export function buildCourt(): Container {
   const border = new Graphics()
     .rect(0, 0, COURT_WIDTH, COURT_HEIGHT)
     .stroke({ width: 4, color: BOUNDARY_COLOR });
-  border.label = "boundary";
+  border.label = 'boundary';
   layer.addChild(border);
 
   return layer;

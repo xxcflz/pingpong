@@ -1,3 +1,18 @@
+console.warn('===== orchestrator.ts LOADED =====');
+
+import {
+  BALL_RADIUS,
+  COURT_HEIGHT,
+  COURT_WIDTH,
+  type MatchPhase,
+  type MatchState,
+  PADDLE_HEIGHT,
+  PADDLE_WIDTH,
+  type PaddleMoveEvent,
+  type PlayerSlot,
+  type SpectatorState,
+} from '@pingpong/shared';
+import { type Application, Container, Graphics, Text } from 'pixi.js';
 /**
  * MatchOrchestrator — top-level state machine for the client.
  *
@@ -7,33 +22,23 @@
  * Server is the source of truth for phase transitions — this orchestrator
  * reacts to server events, never invents phases.
  */
-import { io, type Socket } from "socket.io-client";
-import { Application, Container, Graphics, Text } from "pixi.js";
+import { type Socket, io } from 'socket.io-client';
+import { SOCKET_TRANSPORT } from '../env';
+import { type DragController, createDragHandler } from '../input/drag';
+import { type BallPredictionEngine, createBallPredictionEngine } from '../net/ballPrediction';
 import {
-  COURT_WIDTH,
-  COURT_HEIGHT,
-  PADDLE_WIDTH,
-  PADDLE_HEIGHT,
-  BALL_RADIUS,
-  type MatchState,
-  type MatchPhase,
-  type PlayerSlot,
-  type SpectatorState,
-  type PaddleMoveEvent,
-} from "@pingpong/shared";
-import { DiscordContext } from "../sdk/discord";
-import { LifecycleObserver } from "../sdk/lifecycle";
-import { PongScene } from "../scene/PongScene";
-import { createPredictionEngine, type PredictionEngine } from "../net/prediction";
-import { createBallPredictionEngine, type BallPredictionEngine } from "../net/ballPrediction";
-import { createOpponentPredictionEngine, type OpponentPredictionEngine } from "../net/opponentPrediction";
-import { createDragHandler, type DragController } from "../input/drag";
-import { SpectatorClient } from "../net/spectator";
-import { SOCKET_TRANSPORT } from "../env";
+  type OpponentPredictionEngine,
+  createOpponentPredictionEngine,
+} from '../net/opponentPrediction';
+import { type PredictionEngine, createPredictionEngine } from '../net/prediction';
+import { SpectatorClient } from '../net/spectator';
+import type { PongScene } from '../scene/PongScene';
+import type { DiscordContext } from '../sdk/discord';
+import { LifecycleObserver } from '../sdk/lifecycle';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-export type ClientRole = "player" | "spectator" | "pending";
+export type ClientRole = 'player' | 'spectator' | 'pending';
 
 export interface MatchOrchestratorDeps {
   serverHost: string;
@@ -43,7 +48,7 @@ export interface MatchOrchestratorDeps {
   /** Shared mutable ref — scene's getState reads from this, orchestrator writes to it. */
   stateRef: { current: MatchState };
   /** Mode pre-selected on the landing page; skips the in-game "Choose Mode" overlay. */
-  selectedMode?: "online" | "ai";
+  selectedMode?: 'online' | 'ai';
   /** Paddle color chosen on the landing page. */
   userColor: number;
 }
@@ -58,7 +63,7 @@ declare global {
 // ── Wire protocol types (matching actual server payloads) ───────────────────
 
 interface ServerLobbyUpdate {
-  t: "lobbyUpdate";
+  t: 'lobbyUpdate';
   phase: string;
   slots: { top?: string; bottom?: string };
   paddleColors: Record<string, number>;
@@ -67,38 +72,38 @@ interface ServerLobbyUpdate {
 }
 
 interface ServerCountdownTick {
-  t: "countdownTick";
+  t: 'countdownTick';
   remaining?: number;
   number?: number;
 }
 
 interface ServerMatchStart {
-  t: "matchStart";
+  t: 'matchStart';
   matchId: string;
   players: Record<PlayerSlot, { id: string; username: string; avatarUrl: string | null }>;
 }
 
 interface ServerStateSnapshot {
-  t: "stateSnapshot";
+  t: 'stateSnapshot';
   tick: number;
   lastProcessedSeq: Record<PlayerSlot, number>;
-  ball: MatchState["ball"];
-  paddles: MatchState["paddles"];
-  score: MatchState["score"];
+  ball: MatchState['ball'];
+  paddles: MatchState['paddles'];
+  score: MatchState['score'];
   phase: MatchPhase;
   rallyCount: number;
   ballSpeed: number;
 }
 
 interface ServerScoreEvent {
-  t: "scoreEvent";
+  t: 'scoreEvent';
   side: PlayerSlot;
   score: Record<PlayerSlot, number>;
   reason: string;
 }
 
 interface ServerMatchEnd {
-  t: "matchEnd";
+  t: 'matchEnd';
   matchId: number | null;
   end_reason: string;
   winnerSlot: PlayerSlot | null;
@@ -110,13 +115,13 @@ interface ServerMatchEnd {
 }
 
 interface ServerPause {
-  t: "pause";
+  t: 'pause';
   reason: string;
   userId?: string;
 }
 
 interface ServerAfkWarning {
-  t: "afkWarning";
+  t: 'afkWarning';
   slot: PlayerSlot;
   secondsRemaining: number;
 }
@@ -135,7 +140,7 @@ export class MatchOrchestrator {
   private readonly scene: PongScene;
   private readonly ctx: DiscordContext;
   private readonly stateRef: { current: MatchState };
-  private readonly selectedMode?: "online" | "ai";
+  private selectedMode?: 'online' | 'ai';
   private readonly userColor: number;
 
   // Network
@@ -152,16 +157,20 @@ export class MatchOrchestrator {
   private drag: DragController | null = null;
 
   // State
-  private role: ClientRole = "pending";
+  private role: ClientRole = 'pending';
   private mySlot: PlayerSlot | null = null;
   private myUserId: string | null = null;
-  private currentPhase = "idle";
+  private currentPhase = 'idle';
   private matchState!: MatchState;
 
   // Reconnection
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private isReconnecting = false;
+
+  // Leave game flag (to skip end screen when user initiates leave)
+  private isLeaving = false;
+  private leaveTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Ready button (Pixi overlay)
   private readyOverlay: Container | null = null;
@@ -193,7 +202,7 @@ export class MatchOrchestrator {
   private createStubState(): MatchState {
     return {
       tick: 0,
-      phase: "waiting",
+      phase: 'waiting',
       ball: {
         pos: { x: COURT_WIDTH / 2, y: COURT_HEIGHT / 2 },
         vel: { x: 0, y: 0 },
@@ -201,8 +210,18 @@ export class MatchOrchestrator {
         radius: BALL_RADIUS,
       },
       paddles: {
-        top: { pos: { x: COURT_WIDTH / 2, y: PADDLE_HEIGHT / 2 + 40 }, vel: { x: 0, y: 0 }, width: PADDLE_WIDTH, height: PADDLE_HEIGHT },
-        bottom: { pos: { x: COURT_WIDTH / 2, y: COURT_HEIGHT - PADDLE_HEIGHT / 2 - 40 }, vel: { x: 0, y: 0 }, width: PADDLE_WIDTH, height: PADDLE_HEIGHT },
+        top: {
+          pos: { x: COURT_WIDTH / 2, y: PADDLE_HEIGHT / 2 + 40 },
+          vel: { x: 0, y: 0 },
+          width: PADDLE_WIDTH,
+          height: PADDLE_HEIGHT,
+        },
+        bottom: {
+          pos: { x: COURT_WIDTH / 2, y: COURT_HEIGHT - PADDLE_HEIGHT / 2 - 40 },
+          vel: { x: 0, y: 0 },
+          width: PADDLE_WIDTH,
+          height: PADDLE_HEIGHT,
+        },
       },
       score: { top: 0, bottom: 0 },
       serverTimeMs: Date.now(),
@@ -212,47 +231,58 @@ export class MatchOrchestrator {
   // ── Boot sequence ─────────────────────────────────────────────────────────
 
   async boot(): Promise<void> {
-    const params = new URLSearchParams(window.location.search);
-    this.myUserId = params.get("test_user_id") ?? (this.ctx.isMock ? `mock_user_${Date.now()}` : null);
+    console.warn('[orchestrator] ===== BOOT STARTING =====');
 
-    this.scene.setPhase("waiting");
+    const params = new URLSearchParams(window.location.search);
+    this.myUserId =
+      params.get('test_user_id') ?? (this.ctx.isMock ? `mock_user_${Date.now()}` : null);
+
+    console.warn('[orchestrator] myUserId:', this.myUserId, 'isMock:', this.ctx.isMock);
+
+    this.scene.setPhase('waiting');
 
     if (!this.ctx.isMock) {
-      try {
-        await this.ctx.authorize(this.serverHost);
-        this.myUserId = this.ctx.userId;
-      } catch (err) {
-        throw err;
-      }
+      console.warn('[orchestrator] Authorizing with Discord...');
+      await this.ctx.authorize(this.serverHost);
+      this.myUserId = this.ctx.userId;
+      console.warn('[orchestrator] Discord authorized, userId:', this.myUserId);
     }
 
+    console.warn('[orchestrator] Creating socket...');
     this.createSocket();
+    console.warn('[orchestrator] Subscribing to events...');
     this.subscribeToEvents();
 
+    console.warn('[orchestrator] Waiting for connection...');
     await this.waitForConnection();
+    console.warn('[orchestrator] Connected! Socket ID:', this.socket?.id);
 
     if (this.socket) {
-      this.socket.emit("setPaddleColor", { color: this.userColor });
+      console.warn('[orchestrator] Emitting setPaddleColor:', this.userColor);
+      this.socket.emit('setPaddleColor', { color: this.userColor });
     }
 
+    console.warn('[orchestrator] Starting lobby heartbeat...');
     this.startLobbyHeartbeat();
 
+    console.warn('[orchestrator] Starting lifecycle observer...');
     this.lifecycle = new LifecycleObserver(this.ctx);
     await this.lifecycle.start({
       onPause: () => {
-        if (this.role === "player" && this.socket?.connected) {
-          this.socket.emit("pause");
+        if (this.role === 'player' && this.socket?.connected) {
+          this.socket.emit('pause');
         }
       },
       onResume: () => {
-        if (this.role === "player" && this.socket?.connected) {
-          this.socket.emit("resume");
-          this.socket.emit("request_resync");
+        if (this.role === 'player' && this.socket?.connected) {
+          this.socket.emit('resume');
+          this.socket.emit('request_resync');
         }
       },
     });
 
     this.exposeTestHooks();
+    console.warn('[orchestrator] ===== BOOT COMPLETE =====');
   }
 
   // ── Socket connection ─────────────────────────────────────────────────────
@@ -267,45 +297,38 @@ export class MatchOrchestrator {
       auth.token = this.ctx.accessToken;
     }
 
-    const forcePolling = !this.ctx.isMock && SOCKET_TRANSPORT === "polling";
+    const forcePolling = !this.ctx.isMock && SOCKET_TRANSPORT === 'polling';
     this.socket = io(this.serverHost, {
       path: '/ws',
-      transports: forcePolling ? ["polling"] : ["websocket", "polling"],
+      transports: forcePolling ? ['polling'] : ['websocket', 'polling'],
       upgrade: !forcePolling,
       auth,
       reconnection: false,
     });
 
-    this.socket.on("connect", () => {
+    this.socket.on('connect', () => {
       if (this.isReconnecting) {
         this.onReconnected();
       }
     });
 
-    this.socket.on("disconnect", () => {
+    this.socket.on('disconnect', () => {
       this.onDisconnected();
     });
   }
 
   private async waitForConnection(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Socket connection timeout")), 10000);
-      this.socket!.on("connect", () => {
+      const timeout = setTimeout(() => reject(new Error('Socket connection timeout')), 10000);
+      this.socket?.on('connect', () => {
         clearTimeout(timeout);
         resolve();
       });
-      this.socket!.on("connect_error", (err) => {
+      this.socket?.on('connect_error', (err) => {
         clearTimeout(timeout);
         reject(err);
       });
     });
-  }
-
-  /** Used by resetToLobby after match end. */
-  private async reconnectSocket(): Promise<void> {
-    this.createSocket();
-    this.subscribeToEvents();
-    await this.waitForConnection();
   }
 
   // ── Event subscriptions ───────────────────────────────────────────────────
@@ -314,69 +337,76 @@ export class MatchOrchestrator {
     if (!this.socket) return;
 
     // Lobby updates — drives role determination and phase
-    this.socket.on("lobbyUpdate", (data: ServerLobbyUpdate) => {
+    this.socket.on('lobbyUpdate', (data: ServerLobbyUpdate) => {
       this.onLobbyUpdate(data);
     });
 
     // Countdown ticks
-    this.socket.on("countdownTick", (data: ServerCountdownTick) => {
+    this.socket.on('countdownTick', (data: ServerCountdownTick) => {
       this.onCountdownTick(data);
     });
 
     // Match started
-    this.socket.on("matchStart", (data: ServerMatchStart) => {
+    this.socket.on('matchStart', (data: ServerMatchStart) => {
       this.onMatchStart(data);
     });
 
     // State snapshots (playing phase) — server emits "stateSnapshot"
-    this.socket.on("stateSnapshot", (data: ServerStateSnapshot) => {
+    this.socket.on('stateSnapshot', (data: ServerStateSnapshot) => {
       this.onStateSnapshot(data);
     });
 
     // Score updates — server emits "scoreEvent"
-    this.socket.on("scoreEvent", (data: ServerScoreEvent) => {
+    this.socket.on('scoreEvent', (data: ServerScoreEvent) => {
       this.onScore(data);
     });
 
     // Match end
-    this.socket.on("matchEnd", (data: ServerMatchEnd) => {
+    this.socket.on('matchEnd', (data: ServerMatchEnd) => {
       this.onMatchEnd(data);
     });
 
     // Pause broadcasts
-    this.socket.on("pause", (data: ServerPause) => {
+    this.socket.on('pause', (data: ServerPause) => {
       this.onPause(data);
     });
 
     // Resume broadcasts
-    this.socket.on("resume", () => {
+    this.socket.on('resume', () => {
       this.onResume();
     });
 
     // AFK warnings
-    this.socket.on("afkWarning", (data: ServerAfkWarning) => {
+    this.socket.on('afkWarning', (data: ServerAfkWarning) => {
       this.onAfkWarning(data);
     });
 
     // Server errors
-    this.socket.on("error", (_data: { code: string; message: string }) => {
-    });
+    this.socket.on('error', (_data: { code: string; message: string }) => {});
   }
 
   // ── Role determination ────────────────────────────────────────────────────
 
   private onLobbyUpdate(data: ServerLobbyUpdate): void {
+    console.warn('[orchestrator] onLobbyUpdate:', data);
     const { phase, slots, paddleColors } = data;
+
+    // Don't override phase to 'idle' during active match
+    if (phase === 'idle' && this.currentPhase === 'playing') {
+      console.warn('[orchestrator] Ignoring idle phase during active match');
+      return;
+    }
+
     this.currentPhase = phase;
 
     // Detect our slot from slots data
     if (!this.mySlot && this.myUserId) {
       if (slots.top === this.myUserId) {
-        this.mySlot = "top";
-        this.scene.setUserSlot("top");
+        this.mySlot = 'top';
+        this.scene.setUserSlot('top');
       } else if (slots.bottom === this.myUserId) {
-        this.mySlot = "bottom";
-        this.scene.setUserSlot("bottom");
+        this.mySlot = 'bottom';
+        this.scene.setUserSlot('bottom');
       }
     }
 
@@ -388,67 +418,77 @@ export class MatchOrchestrator {
       }
     }
 
-    if (this.role === "pending") {
+    if (this.role === 'pending') {
       const occupiedSlots = [slots.top, slots.bottom].filter(Boolean).length;
-      if (occupiedSlots >= 2 && (phase === "playing" || phase === "countdown" || phase === "paused")) {
+      console.warn('[orchestrator] role=pending, occupiedSlots:', occupiedSlots, 'phase:', phase);
+      if (
+        occupiedSlots >= 2 &&
+        (phase === 'playing' || phase === 'countdown' || phase === 'paused')
+      ) {
+        console.warn('[orchestrator] becoming spectator');
         this.becomeSpectator();
       } else {
+        console.warn('[orchestrator] becoming player candidate');
         this.becomePlayerCandidate();
       }
     }
 
-    if (phase === "lobby") {
-      if (this.selectedMode !== "ai") {
-        this.scene.setPhase("waiting");
-        this.scene.hideLeaveButton();
+    if (phase === 'lobby') {
+      if (this.selectedMode !== 'ai') {
+        this.scene.setPhase('waiting');
+        this.scene.showLeaveButton();
       }
       this.loadHistory();
-      if (this.role === "player" && !this.mySlot && !this.selectedMode) this.showReadyButton();
-    } else if (phase === "countdown") {
-      this.scene.setPhase("countdown");
-      this.scene.hideLeaveButton();
+      if (this.role === 'player' && !this.mySlot && !this.selectedMode) this.showReadyButton();
+    } else if (phase === 'countdown') {
+      this.scene.setPhase('countdown');
+      this.scene.showLeaveButton();
       this.hideReadyButton();
-    } else if (phase === "playing") {
-      this.scene.setPhase("playing");
+    } else if (phase === 'playing') {
+      this.scene.setPhase('playing');
       this.scene.showLeaveButton();
       this.hideReadyButton();
     }
   }
 
   private becomePlayerCandidate(): void {
-    this.role = "player";
-    this.scene.setRole("player");
-    if (this.selectedMode !== "ai") {
-      this.scene.setPhase("waiting");
+    console.warn('[orchestrator] becomePlayerCandidate called, selectedMode:', this.selectedMode);
+    this.role = 'player';
+    this.scene.setRole('player');
+    if (this.selectedMode !== 'ai') {
+      this.scene.setPhase('waiting');
     }
     this.loadHistory();
 
-    if (this.selectedMode) {
-      this.emitSelectedMode();
-    } else {
-      this.showReadyButton();
-    }
-
-    // Setup paddle prediction — emit paddleInput (server-expected format)
+    // Setup prediction engines BEFORE emitting mode, since AI matches
+    // start immediately and onMatchStart needs these engines to exist
     this.prediction = createPredictionEngine({
       emit: (msg) => {
         this.emitPaddleInput(msg);
       },
     });
-
-    // Setup ball prediction — runs physics locally for immediate rendering
     this.ballPrediction = createBallPredictionEngine();
-
-    // Setup opponent paddle prediction — velocity-based extrapolation
     this.opponentPrediction = createOpponentPredictionEngine(COURT_WIDTH / 2);
+    console.warn('[orchestrator] prediction engines created:', {
+      prediction: !!this.prediction,
+      ballPrediction: !!this.ballPrediction,
+      opponentPrediction: !!this.opponentPrediction,
+    });
 
+    if (this.selectedMode) {
+      console.warn('[orchestrator] emitting selected mode:', this.selectedMode);
+      this.emitSelectedMode();
+    } else {
+      console.warn('[orchestrator] showing ready button');
+      this.showReadyButton();
+    }
   }
 
   private emitPaddleInput(msg: PaddleMoveEvent): void {
     if (!this.socket?.connected) return;
 
     if (this.ctx.isMock) {
-      this.socket.emit("paddleInput", { paddleX: msg.pos.x, seq: msg.seq });
+      this.socket.emit('paddleInput', { paddleX: msg.pos.x, seq: msg.seq });
       return;
     }
 
@@ -478,13 +518,13 @@ export class MatchOrchestrator {
     this.pendingPaddleInput = null;
     if (!msg || !this.socket?.connected) return;
 
-    this.socket.emit("paddleInput", { paddleX: msg.pos.x, seq: msg.seq });
+    this.socket.emit('paddleInput', { paddleX: msg.pos.x, seq: msg.seq });
     this.lastPaddleInputSentAt = performance.now();
   }
 
   private becomeSpectator(): void {
-    this.role = "spectator";
-    this.scene.setRole("spectator");
+    this.role = 'spectator';
+    this.scene.setRole('spectator');
     this.hideReadyButton();
 
     // Close player socket — not needed for spectating
@@ -498,7 +538,7 @@ export class MatchOrchestrator {
     this.spectatorClient = new SpectatorClient(
       this.serverHost,
       this.myUserId ?? undefined,
-      !this.ctx.isMock && SOCKET_TRANSPORT !== "websocket",
+      !this.ctx.isMock && SOCKET_TRANSPORT !== 'websocket',
     );
 
     this.spectatorClient.onState((state: SpectatorState) => {
@@ -511,9 +551,9 @@ export class MatchOrchestrator {
 
     this.spectatorClient.onEnd((winner) => {
       this.scene.showEndScreen({
-        end_reason: "score",
-        winnerName: winner === "top" ? "Top Player" : "Bottom Player",
-        loserName: winner === "top" ? "Bottom Player" : "Top Player",
+        end_reason: 'score',
+        winnerName: winner === 'top' ? 'Top Player' : 'Bottom Player',
+        loserName: winner === 'top' ? 'Bottom Player' : 'Top Player',
         scoreA: this.matchState.score.top,
         scoreB: this.matchState.score.bottom,
         rallyCountMax: 0,
@@ -529,7 +569,6 @@ export class MatchOrchestrator {
 
     // Show spectating banner
     this.showSpectatingBanner();
-
   }
 
   private onSpectatorState(state: SpectatorState): void {
@@ -543,8 +582,18 @@ export class MatchOrchestrator {
         radius: BALL_RADIUS,
       },
       paddles: {
-        top: { pos: { x: state.paddles.top.x, y: PADDLE_HEIGHT / 2 + 40 }, vel: { x: 0, y: 0 }, width: PADDLE_WIDTH, height: PADDLE_HEIGHT },
-        bottom: { pos: { x: state.paddles.bottom.x, y: COURT_HEIGHT - PADDLE_HEIGHT / 2 - 40 }, vel: { x: 0, y: 0 }, width: PADDLE_WIDTH, height: PADDLE_HEIGHT },
+        top: {
+          pos: { x: state.paddles.top.x, y: PADDLE_HEIGHT / 2 + 40 },
+          vel: { x: 0, y: 0 },
+          width: PADDLE_WIDTH,
+          height: PADDLE_HEIGHT,
+        },
+        bottom: {
+          pos: { x: state.paddles.bottom.x, y: COURT_HEIGHT - PADDLE_HEIGHT / 2 - 40 },
+          vel: { x: 0, y: 0 },
+          width: PADDLE_WIDTH,
+          height: PADDLE_HEIGHT,
+        },
       },
       score: state.score,
       serverTimeMs: Date.now(),
@@ -554,10 +603,10 @@ export class MatchOrchestrator {
   // ── Ready button overlay ──────────────────────────────────────────────────
 
   private showReadyButton(): void {
-    if (this.readyOverlay || this.role !== "player") return;
+    if (this.readyOverlay || this.role !== 'player') return;
 
     const overlay = new Container();
-    overlay.label = "readyOverlay";
+    overlay.label = 'readyOverlay';
 
     // Dim background
     const bg = new Graphics()
@@ -566,12 +615,12 @@ export class MatchOrchestrator {
     overlay.addChild(bg);
 
     const title = new Text({
-      text: "Choose Mode",
+      text: 'Choose Mode',
       style: {
         fontFamily: "'Courier New', Courier, monospace",
         fontSize: 34,
         fill: 0xff_ff_ff,
-        fontWeight: "bold",
+        fontWeight: 'bold',
       },
     });
     title.anchor.set(0.5);
@@ -580,24 +629,24 @@ export class MatchOrchestrator {
     overlay.addChild(title);
 
     const online = this.createMenuButton({
-      label: "Play Online",
+      label: 'Play Online',
       y: COURT_HEIGHT / 2 - 45,
       color: 0x4d_d2_ff,
       onTap: () => {
         if (!this.socket?.connected) return;
-        this.socket.emit("readyToggle");
+        this.socket.emit('readyToggle');
         this.hideReadyButton();
       },
     });
     overlay.addChild(online);
 
     const ai = this.createMenuButton({
-      label: "Play AI",
+      label: 'Play AI',
       y: COURT_HEIGHT / 2 + 45,
       color: 0x5e_ea_8a,
       onTap: () => {
         if (!this.socket?.connected) return;
-        this.socket.emit("playAi");
+        this.socket.emit('playAi');
         this.hideReadyButton();
       },
     });
@@ -618,12 +667,10 @@ export class MatchOrchestrator {
     const btnH = 68;
     const btnX = (COURT_WIDTH - btnW) / 2;
 
-    const bg = new Graphics()
-      .roundRect(btnX, opts.y, btnW, btnH, 12)
-      .fill(opts.color);
-    bg.label = opts.label.replace(/\s+/g, "").toLowerCase();
-    bg.eventMode = "static";
-    bg.cursor = "pointer";
+    const bg = new Graphics().roundRect(btnX, opts.y, btnW, btnH, 12).fill(opts.color);
+    bg.label = opts.label.replace(/\s+/g, '').toLowerCase();
+    bg.eventMode = 'static';
+    bg.cursor = 'pointer';
     container.addChild(bg);
 
     const label = new Text({
@@ -632,7 +679,7 @@ export class MatchOrchestrator {
         fontFamily: "'Courier New', Courier, monospace",
         fontSize: 28,
         fill: 0xff_ff_ff,
-        fontWeight: "bold",
+        fontWeight: 'bold',
       },
     });
     label.anchor.set(0.5);
@@ -640,7 +687,7 @@ export class MatchOrchestrator {
     label.y = opts.y + btnH / 2;
     container.addChild(label);
 
-    bg.on("pointertap", () => opts.onTap(label, bg));
+    bg.on('pointertap', () => opts.onTap(label, bg));
 
     return container;
   }
@@ -655,11 +702,11 @@ export class MatchOrchestrator {
   /** Auto-emit the mode chosen on the landing page, skipping the in-game overlay. */
   private emitSelectedMode(): void {
     if (!this.socket?.connected || !this.selectedMode) return;
-    if (this.selectedMode === "online") {
-      this.socket.emit("readyToggle");
+    if (this.selectedMode === 'online') {
+      this.socket.emit('readyToggle');
     } else {
-      this.socket.emit("playAi");
-      this.scene.setPhase("countdown");
+      this.socket.emit('playAi');
+      this.scene.setPhase('countdown');
       this.scene.setCountdown(3);
     }
   }
@@ -674,45 +721,52 @@ export class MatchOrchestrator {
 
   private showSpectatingBanner(): void {
     const banner = new Text({
-      text: "Spectating",
+      text: 'Spectating',
       style: {
         fontFamily: "'Courier New', Courier, monospace",
         fontSize: 28,
         fill: 0x88_99_aa,
-        fontWeight: "bold",
+        fontWeight: 'bold',
       },
     });
     banner.anchor.set(0.5);
     banner.x = COURT_WIDTH / 2;
     banner.y = 60;
-    banner.label = "spectatingBanner";
+    banner.label = 'spectatingBanner';
     this.scene.getLayers().uiLayer.addChild(banner);
   }
 
   // ── Countdown ─────────────────────────────────────────────────────────────
 
   private onCountdownTick(data: ServerCountdownTick): void {
-    this.currentPhase = "countdown";
-    this.scene.setPhase("countdown");
+    this.currentPhase = 'countdown';
+    this.scene.setPhase('countdown');
     this.scene.setCountdown(data.remaining ?? data.number ?? 0);
   }
 
   // ── Match start ───────────────────────────────────────────────────────────
 
   private onMatchStart(data: ServerMatchStart): void {
-    this.currentPhase = "playing";
-    this.scene.setPhase("playing");
+    console.log('[orchestrator] matchStart received:', data);
+    this.currentPhase = 'playing';
+    this.scene.setPhase('playing');
     this.scene.setCountdown(0);
 
     // Determine my slot from match start data
     if (this.myUserId) {
       if (data.players.top.id === this.myUserId) {
-        this.mySlot = "top";
-        this.scene.setUserSlot("top");
+        this.mySlot = 'top';
+        this.scene.setUserSlot('top');
+        console.log('[orchestrator] assigned to top slot');
       } else if (data.players.bottom.id === this.myUserId) {
-        this.mySlot = "bottom";
-        this.scene.setUserSlot("bottom");
+        this.mySlot = 'bottom';
+        this.scene.setUserSlot('bottom');
+        console.log('[orchestrator] assigned to bottom slot');
+      } else {
+        console.warn('[orchestrator] myUserId not found in matchStart players:', this.myUserId, data.players);
       }
+    } else {
+      console.warn('[orchestrator] myUserId is null when matchStart received');
     }
 
     // Reset ball prediction to fresh serve
@@ -723,14 +777,21 @@ export class MatchOrchestrator {
         spin: 0,
         radius: BALL_RADIUS,
       });
+      console.log('[orchestrator] ball prediction reset');
     }
 
     // Wire drag handler
     this.setupDragHandler();
+    console.log('[orchestrator] drag handler setup');
 
     // Start Pixi ticker for prediction+interpolation
     this.app.ticker.add(this.boundTick);
-
+    console.log('[orchestrator] ticker added, prediction engines:', {
+      prediction: !!this.prediction,
+      ballPrediction: !!this.ballPrediction,
+      opponentPrediction: !!this.opponentPrediction,
+      mySlot: this.mySlot,
+    });
   }
 
   private setupDragHandler(): void {
@@ -742,20 +803,20 @@ export class MatchOrchestrator {
       canvas,
       {
         onDragStart: () => {
-          this.prediction!.startDrag();
+          this.prediction?.startDrag();
         },
         onPaddleX: (courtX) => {
-          this.prediction!.applyInput(courtX, 0);
+          this.prediction?.applyInput(courtX, 0);
         },
         onDragEnd: () => {
-          this.prediction!.endDrag();
+          this.prediction?.endDrag();
         },
         onRelease: (velX) => {
-          this.prediction!.applyInput(this.prediction!.getPredictedPaddleX(), velX);
+          this.prediction?.applyInput(this.prediction?.getPredictedPaddleX(), velX);
         },
       },
       (screenX) => this.scene.screenToCourtX(screenX),
-      () => this.prediction!.getPredictedPaddleX(),
+      () => this.prediction?.getPredictedPaddleX() ?? this.scene.screenToCourtX(0),
     );
 
     this.drag.enable();
@@ -764,7 +825,7 @@ export class MatchOrchestrator {
   // ── State snapshots ───────────────────────────────────────────────────────
 
   private onStateSnapshot(data: ServerStateSnapshot): void {
-    if (this.role !== "player") return;
+    if (this.role !== 'player') return;
 
     // Store server-authoritative state for prediction engines
     // (don't write to stateRef.current - that causes race condition with onTick)
@@ -791,7 +852,7 @@ export class MatchOrchestrator {
 
     // Feed opponent paddle prediction with server snapshot
     if (this.opponentPrediction && this.mySlot) {
-      const opponentSlot: PlayerSlot = this.mySlot === "top" ? "bottom" : "top";
+      const opponentSlot: PlayerSlot = this.mySlot === 'top' ? 'bottom' : 'top';
       const opponentPaddle = serverState.paddles[opponentSlot];
       this.opponentPrediction.onSnapshot(opponentPaddle.pos.x, opponentPaddle.vel.x);
     }
@@ -811,9 +872,32 @@ export class MatchOrchestrator {
 
   // ── Tick (Pixi ticker) ────────────────────────────────────────────────────
 
+  private tickCount = 0;
+
   private onTick(ticker: { deltaMS: number }): void {
-    if (this.role !== "player" || this.currentPhase !== "playing") return;
-    if (!this.prediction || !this.opponentPrediction || !this.mySlot || !this.ballPrediction) return;
+    if (this.role !== 'player' || this.currentPhase !== 'playing') {
+      if (this.tickCount === 0) {
+        console.log('[orchestrator] onTick skipped - role:', this.role, 'phase:', this.currentPhase);
+      }
+      return;
+    }
+
+    if (!this.prediction || !this.opponentPrediction || !this.mySlot || !this.ballPrediction) {
+      if (this.tickCount === 0) {
+        console.log('[orchestrator] onTick skipped - missing engines:', {
+          prediction: !!this.prediction,
+          opponentPrediction: !!this.opponentPrediction,
+          mySlot: this.mySlot,
+          ballPrediction: !!this.ballPrediction,
+        });
+      }
+      return;
+    }
+
+    this.tickCount++;
+    if (this.tickCount <= 3 || this.tickCount % 60 === 0) {
+      console.log(`[orchestrator] onTick #${this.tickCount}, dt=${ticker.deltaMS.toFixed(2)}ms`);
+    }
 
     // Advance predictions using frame dt
     const dt = ticker.deltaMS / 1000;
@@ -831,14 +915,12 @@ export class MatchOrchestrator {
     const opponentX = this.opponentPrediction.getPredictedX();
 
     // Build composite state for scene
-    const myPaddleY = this.mySlot === "top"
-      ? PADDLE_HEIGHT / 2 + 40
-      : COURT_HEIGHT - PADDLE_HEIGHT / 2 - 40;
-    const opponentPaddleY = this.mySlot === "top"
-      ? COURT_HEIGHT - PADDLE_HEIGHT / 2 - 40
-      : PADDLE_HEIGHT / 2 + 40;
+    const myPaddleY =
+      this.mySlot === 'top' ? PADDLE_HEIGHT / 2 + 40 : COURT_HEIGHT - PADDLE_HEIGHT / 2 - 40;
+    const opponentPaddleY =
+      this.mySlot === 'top' ? COURT_HEIGHT - PADDLE_HEIGHT / 2 - 40 : PADDLE_HEIGHT / 2 + 40;
 
-    const opponentSlot: PlayerSlot = this.mySlot === "top" ? "bottom" : "top";
+    const opponentSlot: PlayerSlot = this.mySlot === 'top' ? 'bottom' : 'top';
 
     this.setState({
       ...this.matchState,
@@ -865,10 +947,10 @@ export class MatchOrchestrator {
     // Reset ball prediction — server will send the new ball state in the next snapshot
     if (this.ballPrediction) {
       // Reset to center with initial velocity toward the loser
-      const toward = data.side === "top" ? "bottom" : "top";
+      const toward = data.side === 'top' ? 'bottom' : 'top';
       this.ballPrediction.reset({
         pos: { x: COURT_WIDTH / 2, y: COURT_HEIGHT / 2 },
-        vel: { x: 0, y: toward === "bottom" ? 420 : -420 },
+        vel: { x: 0, y: toward === 'bottom' ? 420 : -420 },
         spin: 0,
         radius: BALL_RADIUS,
       });
@@ -878,14 +960,25 @@ export class MatchOrchestrator {
   // ── Match end ─────────────────────────────────────────────────────────────
 
   private onMatchEnd(data: ServerMatchEnd): void {
-    this.currentPhase = "ended";
-    this.scene.setPhase("finished");
+    // If user initiated leave, skip showing the end screen and go to lobby
+    if (this.isLeaving) {
+      this.isLeaving = false;
+      if (this.leaveTimeout) {
+        clearTimeout(this.leaveTimeout);
+        this.leaveTimeout = null;
+      }
+      this.resetToLobby();
+      return;
+    }
+
+    this.currentPhase = 'ended';
+    this.scene.setPhase('finished');
     this.scene.hideLeaveButton();
 
     this.scene.hideAfkWarning();
 
-    const winnerName = data.winner?.username ?? "Unknown";
-    const loserName = data.loser?.username ?? "Unknown";
+    const winnerName = data.winner?.username ?? 'Unknown';
+    const loserName = data.loser?.username ?? 'Unknown';
 
     this.scene.showEndScreen({
       end_reason: data.end_reason,
@@ -905,46 +998,64 @@ export class MatchOrchestrator {
   }
 
   private handleRematch(): void {
-    if (!this.socket || this.role !== "player") return;
+    if (!this.socket || this.role !== 'player') return;
 
     this.scene.hideEndScreen();
-    this.scene.setPhase("waiting");
+    this.scene.setPhase('waiting');
 
     // Reset state for new match
-    this.currentPhase = "waiting";
+    this.currentPhase = 'waiting';
     this.setState(this.createStubState());
 
     // Server will handle rematch logic (keep players, reset scores, restart countdown)
-    this.socket.emit("requestRematch");
+    this.socket.emit('requestRematch');
   }
 
   public leaveGame(): void {
     if (!this.socket) return;
 
-    // Only allow leaving during active gameplay
-    if (this.currentPhase === "playing" || this.currentPhase === "countdown") {
-      this.socket.emit("leaveGame");
-      // Server will handle forfeit and send matchEnd event
+    if (this.currentPhase === 'playing' || this.currentPhase === 'paused') {
+      // Server accepts leaveGame during 'playing' or 'paused' — it will broadcast
+      // matchEnd, and our onMatchEnd handler checks isLeaving to skip the
+      // end screen and call resetToLobby().
+      this.isLeaving = true;
+      this.socket.emit('leaveGame');
+
+      // Fallback: if matchEnd doesn't arrive within 2s, force lobby transition
+      if (this.leaveTimeout) clearTimeout(this.leaveTimeout);
+      this.leaveTimeout = setTimeout(() => {
+        if (this.isLeaving) {
+          this.isLeaving = false;
+          this.resetToLobby();
+        }
+      }, 2000);
+    } else if (this.currentPhase === 'countdown') {
+      // Server ignores leaveGame during countdown (phase !== 'playing'),
+      // so we go straight to lobby — no matchEnd will be broadcast.
+      this.resetToLobby();
     }
   }
 
   private resetToLobby(): void {
-    this.role = "pending";
+    this.role = 'pending';
     this.mySlot = null;
-    this.currentPhase = "idle";
+    this.currentPhase = 'idle';
+    this.selectedMode = undefined;
     this.prediction = null;
     this.ballPrediction = null;
     this.opponentPrediction = null;
 
     this.scene.hideEndScreen();
     this.hideReadyButton();
-    this.scene.showWinner("");
+    this.scene.showWinner('');
     this.scene.setCountdown(0);
-    this.scene.setPhase("waiting");
+    this.scene.setPhase('waiting');
     this.setState(this.createStubState());
 
-    // In mock/browser mode, we can safely reconnect the socket — direct path
-    // to Fastify, no proxy layers, works reliably.
+    // Always reload the page to return to the landing page.
+    // This ensures a clean state and shows the full landing page experience
+    // with color picker and play mode selection, rather than just the
+    // in-game "Choose Mode" overlay.
     //
     // In Discord iframe mode, socket reconnect through cloudflared + Vite
     // proxy layer is unreliable (WebSocket upgrade on reconnect can silently
@@ -952,40 +1063,22 @@ export class MatchOrchestrator {
     // entire boot() sequence (DiscordContext.init → patchUrlMappings →
     // socket connect → authorize) from a clean slate. Discord's iframe
     // tolerates self-reload without losing Activity session.
-    if (this.ctx.isMock) {
-      // Set reconnecting flag BEFORE disconnecting to prevent onDisconnected()
-      // from showing the reconnect banner and scheduling another reconnect
-      this.isReconnecting = true;
-
-      if (this.socket) {
-        this.socket.removeAllListeners();
-        this.socket.disconnect();
-        this.socket = null;
-      }
-      this.reconnectSocket().then(() => {
-        this.isReconnecting = false;
-        this.startLobbyHeartbeat();
-      }).catch(() => {
-        this.isReconnecting = false;
-      });
-    } else {
-      window.location.reload();
-    }
+    window.location.reload();
   }
 
   // ── Pause / Resume ────────────────────────────────────────────────────────
 
   private onPause(_data: ServerPause): void {
-    this.currentPhase = "paused";
-    this.scene.setPhase("paused");
+    this.currentPhase = 'paused';
+    this.scene.setPhase('paused');
     this.scene.hideLeaveButton();
     this.drag?.disable();
   }
 
   private onResume(): void {
-    if (this.currentPhase === "paused") {
-      this.currentPhase = "playing";
-      this.scene.setPhase("playing");
+    if (this.currentPhase === 'paused') {
+      this.currentPhase = 'playing';
+      this.scene.setPhase('playing');
       this.scene.showLeaveButton();
       this.drag?.enable();
     }
@@ -1000,7 +1093,7 @@ export class MatchOrchestrator {
   // ── Reconnection ──────────────────────────────────────────────────────────
 
   private onDisconnected(): void {
-    if (this.role === "spectator") return;
+    if (this.role === 'spectator') return;
     if (this.isReconnecting) return;
 
     this.isReconnecting = true;
@@ -1018,16 +1111,11 @@ export class MatchOrchestrator {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-
   }
 
   private scheduleReconnect(): void {
-    const delay = Math.min(
-      RECONNECT_BASE_MS * Math.pow(2, this.reconnectAttempts),
-      RECONNECT_MAX_MS,
-    );
+    const delay = Math.min(RECONNECT_BASE_MS * 2 ** this.reconnectAttempts, RECONNECT_MAX_MS);
     this.reconnectAttempts++;
-
 
     this.reconnectTimer = setTimeout(() => {
       if (this.socket) {
@@ -1038,24 +1126,24 @@ export class MatchOrchestrator {
 
   private showReconnectBanner(): void {
     const banner = new Text({
-      text: "Reconnecting…",
+      text: 'Reconnecting…',
       style: {
         fontFamily: "'Courier New', Courier, monospace",
         fontSize: 32,
         fill: 0xff_aa_00,
-        fontWeight: "bold",
+        fontWeight: 'bold',
       },
     });
     banner.anchor.set(0.5);
     banner.x = COURT_WIDTH / 2;
     banner.y = COURT_HEIGHT / 2;
-    banner.label = "reconnectBanner";
+    banner.label = 'reconnectBanner';
     banner.zIndex = 9999;
     this.scene.getLayers().uiLayer.addChild(banner);
   }
 
   private hideReconnectBanner(): void {
-    const banner = this.scene.getLayers().uiLayer.getChildByLabel("reconnectBanner");
+    const banner = this.scene.getLayers().uiLayer.getChildByLabel('reconnectBanner');
     if (banner) banner.destroy();
   }
 
@@ -1065,7 +1153,7 @@ export class MatchOrchestrator {
     this.stopLobbyHeartbeat();
     this.lobbyHeartbeatTimer = setInterval(() => {
       if (this.socket?.connected) {
-        this.socket.emit("lobby_heartbeat");
+        this.socket.emit('lobby_heartbeat');
       }
     }, 5000);
   }
@@ -1106,15 +1194,29 @@ export class MatchOrchestrator {
       clearTimeout(this.paddleInputTimer);
       this.paddleInputTimer = null;
     }
+    if (this.leaveTimeout) {
+      clearTimeout(this.leaveTimeout);
+      this.leaveTimeout = null;
+    }
   }
 
   // ── Public getters for testing ────────────────────────────────────────────
 
-  get currentRole(): ClientRole { return this.role; }
-  get playerSlot(): PlayerSlot | null { return this.mySlot; }
-  get phase(): string { return this.currentPhase; }
-  get state(): MatchState { return this.matchState; }
-  get reconnecting(): boolean { return this.isReconnecting; }
+  get currentRole(): ClientRole {
+    return this.role;
+  }
+  get playerSlot(): PlayerSlot | null {
+    return this.mySlot;
+  }
+  get phase(): string {
+    return this.currentPhase;
+  }
+  get state(): MatchState {
+    return this.matchState;
+  }
+  get reconnecting(): boolean {
+    return this.isReconnecting;
+  }
 
   private setState(s: MatchState): void {
     this.matchState = s;

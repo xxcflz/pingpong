@@ -1,7 +1,7 @@
-import { eq, desc, or } from "drizzle-orm";
-import type { DrizzleDb } from "./index.js";
-import { users, matches } from "./schema.js";
-import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
+import { desc, eq, or } from 'drizzle-orm';
+import type { InferInsertModel, InferSelectModel } from 'drizzle-orm';
+import type { DrizzleDb } from './index.js';
+import { matches, users } from './schema.js';
 
 export type User = InferSelectModel<typeof users>;
 export type NewUser = InferInsertModel<typeof users>;
@@ -14,11 +14,7 @@ export function upsertUserByDiscordId(
   data: { discordId: string; username: string; avatar?: string | null },
 ): User {
   const now = new Date();
-  const existing = db
-    .select()
-    .from(users)
-    .where(eq(users.discordId, data.discordId))
-    .get();
+  const existing = db.select().from(users).where(eq(users.discordId, data.discordId)).get();
 
   if (existing) {
     const updated = db
@@ -75,7 +71,7 @@ export function endMatch(
     scoreA: number;
     scoreB: number;
     winnerId: number | null;
-    endReason: "score" | "forfeit_dc" | "forfeit_afk" | "forfeit_leave";
+    endReason: 'score' | 'forfeit_dc' | 'forfeit_afk' | 'forfeit_leave';
     rallyCountMax?: number | null;
   },
 ): Match {
@@ -97,11 +93,7 @@ export function endMatch(
 }
 
 /** List recent matches where the user was either player A or B. */
-export function listRecentMatchesForUser(
-  db: DrizzleDb,
-  userId: number,
-  limit = 20,
-): Match[] {
+export function listRecentMatchesForUser(db: DrizzleDb, userId: number, limit = 20): Match[] {
   return db
     .select()
     .from(matches)

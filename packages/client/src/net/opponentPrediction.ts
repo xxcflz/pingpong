@@ -7,7 +7,7 @@
  *
  * Pure data — no Pixi, no DOM.
  */
-import { COURT_WIDTH, PADDLE_WIDTH } from "@pingpong/shared";
+import { COURT_WIDTH, PADDLE_WIDTH } from '@pingpong/shared';
 
 /** Maximum correction distance before snapping (px). */
 const MAX_CORRECTION_PX = 60;

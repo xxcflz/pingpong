@@ -1,3 +1,11 @@
+import {
+  COURT_HEIGHT,
+  COURT_WIDTH,
+  type MatchPhase,
+  type MatchState,
+  PADDLE_HEIGHT,
+  type PlayerSlot,
+} from '@pingpong/shared';
 /**
  * PongScene — orchestrator for the full visual scene.
  *
@@ -8,40 +16,32 @@
  *
  * All dimensions/colors from @pingpong/shared — zero magic numbers.
  */
-import { Application, Container, Graphics } from "pixi.js";
+import { type Application, Container, type Graphics } from 'pixi.js';
+import { type BallNode, createBall, updateBall } from './Ball';
+import { buildCourt } from './Court';
+import { type EndScreenData, type EndScreenNode, buildEndScreen } from './EndScreen';
+import { type HistoryWidgetNode, buildHistoryWidget } from './HistoryWidget';
 import {
-  COURT_WIDTH,
-  COURT_HEIGHT,
-  PADDLE_HEIGHT,
-  type MatchState,
-  type MatchPhase,
-  type PlayerSlot,
-} from "@pingpong/shared";
-import { buildCourt } from "./Court";
-import { createPaddle, recolorPaddle, PADDLE_COLOR_BOTTOM, PADDLE_COLOR_TOP } from "./Paddle";
-import { createBall, updateBall, type BallNode } from "./Ball";
-import {
-  buildHud,
-  setScores,
-  setRally,
-  setSpeedGauge,
-  setBanner,
-  showAfk,
-  hideAfk,
-  flashScore,
-  setAfkPulse,
   type HudNode,
-} from "./Hud";
-import { buildEndScreen, type EndScreenNode, type EndScreenData } from "./EndScreen";
-import { buildHistoryWidget, type HistoryWidgetNode } from "./HistoryWidget";
+  buildHud,
+  flashScore,
+  hideAfk,
+  setAfkPulse,
+  setBanner,
+  setRally,
+  setScores,
+  setSpeedGauge,
+  showAfk,
+} from './Hud';
+import { PADDLE_COLOR_BOTTOM, PADDLE_COLOR_TOP, createPaddle, recolorPaddle } from './Paddle';
 
 /** Internal role tracking. */
-type Role = "player" | "spectator";
+type Role = 'player' | 'spectator';
 
 /** Status banner text per match phase. */
 const PHASE_BANNERS: Partial<Record<MatchPhase, string>> = {
-  waiting: "Waiting for opponent…",
-  paused: "Paused…",
+  waiting: 'Waiting for opponent…',
+  paused: 'Paused…',
 };
 
 /**
@@ -72,16 +72,16 @@ export class PongScene {
   private readonly historyWidget: HistoryWidgetNode;
 
   // Internal state
-  private role: Role = "player";
+  private role: Role = 'player';
   private rally = 0;
-  private flashSide: "top" | "bottom" | null = null;
+  private flashSide: 'top' | 'bottom' | null = null;
   private flashStart = 0;
   private countdownN = 0;
-  private winnerName = "";
+  private winnerName = '';
   private endScreen: EndScreenNode | null = null;
   private afkSlot: PlayerSlot | null = null;
   private afkStartTime = 0;
-  private userSlot: PlayerSlot = "bottom";
+  private userSlot: PlayerSlot = 'bottom';
 
   // Resize handler ref for cleanup
   private readonly onResize: () => void;
@@ -94,7 +94,7 @@ export class PongScene {
     // ── Build layers ──────────────────────────────────────────
     this.bgLayer = buildCourt();
     this.playLayer = new Container();
-    this.playLayer.label = "playLayer";
+    this.playLayer.label = 'playLayer';
     this.hud = buildHud();
     this.uiLayer = this.hud.layer;
     this.historyWidget = buildHistoryWidget();
@@ -102,13 +102,13 @@ export class PongScene {
     this.uiLayer.addChild(this.historyWidget.container);
 
     // ── Paddles ───────────────────────────────────────────────
-    const pTop = createPaddle("paddleTop", PADDLE_COLOR_TOP);
+    const pTop = createPaddle('paddleTop', PADDLE_COLOR_TOP);
     pTop.x = COURT_WIDTH / 2;
     pTop.y = PADDLE_HEIGHT / 2 + 40;
     this.paddleTop = pTop;
     this.playLayer.addChild(pTop);
 
-    const pBot = createPaddle("paddleBottom", this.userColor);
+    const pBot = createPaddle('paddleBottom', this.userColor);
     pBot.x = COURT_WIDTH / 2;
     pBot.y = COURT_HEIGHT - PADDLE_HEIGHT / 2 - 40;
     this.paddleBottom = pBot;
@@ -120,7 +120,7 @@ export class PongScene {
 
     // ── Root container ────────────────────────────────────────
     this.root = new Container();
-    this.root.label = "root";
+    this.root.label = 'root';
     this.root.addChild(this.bgLayer);
     this.root.addChild(this.playLayer);
     this.root.addChild(this.uiLayer);
@@ -128,14 +128,14 @@ export class PongScene {
 
     // ── Letterbox resize ──────────────────────────────────────
     this.onResize = () => this.applyLetterbox();
-    window.addEventListener("resize", this.onResize);
+    window.addEventListener('resize', this.onResize);
     this.applyLetterbox();
 
     // ── Ticker ────────────────────────────────────────────────
     this.app.ticker.add(this.tick, this);
 
     // ── Initial UI state ─────────────────────────────────────
-    this.hideLeaveButton();
+    this.showLeaveButton();
   }
 
   // ── Render loop ─────────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ export class PongScene {
     this.paddleBottom.y = state.paddles.bottom.pos.y;
 
     // Spectator dim
-    if (this.role === "spectator") {
+    if (this.role === 'spectator') {
       this.paddleTop.alpha = 0.5;
       this.paddleBottom.alpha = 0.5;
     } else {
@@ -168,7 +168,7 @@ export class PongScene {
     setSpeedGauge(this.hud, ballSpeed);
 
     // Phase banner
-    const banner = PHASE_BANNERS[state.phase] ?? "";
+    const banner = PHASE_BANNERS[state.phase] ?? '';
     if (this.countdownN > 0) {
       setBanner(this.hud, String(this.countdownN));
     } else if (this.winnerName) {
@@ -196,7 +196,7 @@ export class PongScene {
     // AFK pulse — 1 Hz sine wave
     if (this.afkSlot) {
       const elapsed = performance.now() - this.afkStartTime;
-      const alpha = 0.35 + 0.35 * Math.sin(elapsed * 2 * Math.PI / 1000);
+      const alpha = 0.35 + 0.35 * Math.sin((elapsed * 2 * Math.PI) / 1000);
       setAfkPulse(this.hud, alpha);
     }
   }
@@ -240,7 +240,7 @@ export class PongScene {
     if (this.userSlot === slot) return;
     this.userSlot = slot;
 
-    if (slot === "top") {
+    if (slot === 'top') {
       // User is at top: top paddle gets user color, bottom gets red
       recolorPaddle(this.paddleTop as Graphics, this.userColor);
       recolorPaddle(this.paddleBottom as Graphics, PADDLE_COLOR_TOP);
@@ -256,7 +256,7 @@ export class PongScene {
    * Updates the paddle that is NOT the user's paddle.
    */
   setOpponentColor(color: number): void {
-    if (this.userSlot === "top") {
+    if (this.userSlot === 'top') {
       recolorPaddle(this.paddleBottom as Graphics, color);
     } else {
       recolorPaddle(this.paddleTop as Graphics, color);
@@ -264,7 +264,7 @@ export class PongScene {
   }
 
   setPhase(phase: MatchPhase): void {
-    const isLobby = phase === "waiting";
+    const isLobby = phase === 'waiting';
     this.historyWidget.setVisible(isLobby);
   }
 
@@ -279,7 +279,7 @@ export class PongScene {
   }
 
   /** Trigger a score flash on the given side. */
-  flashScore(side: "top" | "bottom"): void {
+  flashScore(side: 'top' | 'bottom'): void {
     this.flashSide = side;
     this.flashStart = performance.now();
   }
@@ -317,20 +317,41 @@ export class PongScene {
 
   /** Wire the leave button click handler. */
   setLeaveButtonCallback(callback: () => void): void {
-    this.hud.leaveButton.eventMode = "static";
-    this.hud.leaveButton.on("pointertap", callback);
+    this.hud.leaveButton.eventMode = 'static';
+    this.hud.leaveButton.on('pointertap', callback);
   }
 
   /** Show the leave button (during gameplay). */
   showLeaveButton(): void {
     this.hud.leaveButton.alpha = 1;
-    this.hud.leaveButton.eventMode = "static";
+    this.hud.leaveButton.eventMode = 'static';
   }
 
   /** Hide the leave button (during non-gameplay phases). */
   hideLeaveButton(): void {
     this.hud.leaveButton.alpha = 0;
-    this.hud.leaveButton.eventMode = "none";
+    this.hud.leaveButton.eventMode = 'none';
+  }
+
+  /** Wire the pause menu Continue and Exit buttons. */
+  setPauseMenuCallbacks(onContinue: () => void, onExit: () => void): void {
+    this.hud.continueBtn.on('pointertap', onContinue);
+    this.hud.exitBtn.on('pointertap', onExit);
+  }
+
+  /** Show the pause menu overlay. */
+  showPauseMenu(): void {
+    this.hud.pauseMenu.visible = true;
+  }
+
+  /** Hide the pause menu overlay. */
+  hidePauseMenu(): void {
+    this.hud.pauseMenu.visible = false;
+  }
+
+  /** Check if pause menu is currently visible. */
+  isPaused(): boolean {
+    return this.hud.pauseMenu.visible;
   }
 
   loadMatchHistory(accessToken: string, userId: string): Promise<void> {
@@ -345,7 +366,7 @@ export class PongScene {
   /** Clean up: remove ticker, resize listener, destroy stage. */
   destroy(): void {
     this.app.ticker.remove(this.tick, this);
-    window.removeEventListener("resize", this.onResize);
+    window.removeEventListener('resize', this.onResize);
     this.root.destroy({ children: true });
   }
 }

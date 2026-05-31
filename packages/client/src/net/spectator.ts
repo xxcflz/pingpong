@@ -1,8 +1,5 @@
-import { io, type Socket } from "socket.io-client";
-import type {
-  PlayerSlot,
-  SpectatorState,
-} from "@pingpong/shared";
+import type { PlayerSlot, SpectatorState } from '@pingpong/shared';
+import { type Socket, io } from 'socket.io-client';
 
 export type SpectatorStateHandler = (state: SpectatorState) => void;
 export type SpectatorScoreHandler = (
@@ -29,31 +26,31 @@ export class SpectatorClient {
 
     this.socket = io(`${serverUrl}/spectate`, {
       path: '/ws',
-      transports: preferPolling ? ["polling"] : ["websocket"],
+      transports: preferPolling ? ['polling'] : ['websocket'],
       upgrade: !preferPolling,
       query,
     });
 
-    this.socket.on("SpectatorState", (data: SpectatorState) => {
+    this.socket.on('SpectatorState', (data: SpectatorState) => {
       this.currentState = data;
       for (const fn of this.stateHandlers) fn(data);
     });
 
     this.socket.on(
-      "SpectatorScore",
+      'SpectatorScore',
       (data: { score: Readonly<Record<PlayerSlot, number>>; scorer: PlayerSlot }) => {
         for (const fn of this.scoreHandlers) fn(data.score, data.scorer);
       },
     );
 
     this.socket.on(
-      "SpectatorEnd",
+      'SpectatorEnd',
       (data: { winner: PlayerSlot; score: Readonly<Record<PlayerSlot, number>> }) => {
         for (const fn of this.endHandlers) fn(data.winner, data.score);
       },
     );
 
-    this.socket.on("Error", (data: { code: string; message: string }) => {
+    this.socket.on('Error', (data: { code: string; message: string }) => {
       for (const fn of this.errorHandlers) fn(data.code, data.message);
     });
   }

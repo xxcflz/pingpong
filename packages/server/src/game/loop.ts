@@ -5,21 +5,21 @@
  * All physics math is delegated to @pingpong/shared pure functions.
  */
 
-import { performance } from "node:perf_hooks";
+import { performance } from 'node:perf_hooks';
 import {
   COURT_WIDTH,
   PADDLE_MAX_SPEED,
   PADDLE_WIDTH,
-  TICK_RATE_HZ,
   SCORE_TO_WIN,
-} from "@pingpong/shared";
-import { getIO } from "../socket/index.js";
-import { log } from "../util/logger.js";
-import { AI_USER_ID, lobby } from "../lobby/state.js";
-import { afkTracker } from "../lobby/afk.js";
-import { finishMatch } from "./finish.js";
-import type { Room, PendingEvent } from "./room.js";
-import type { PlayerSlot } from "@pingpong/shared";
+  TICK_RATE_HZ,
+} from '@pingpong/shared';
+import type { PlayerSlot } from '@pingpong/shared';
+import { afkTracker } from '../lobby/afk.js';
+import { AI_USER_ID, lobby } from '../lobby/state.js';
+import { getIO } from '../socket/index.js';
+import { log } from '../util/logger.js';
+import { finishMatch } from './finish.js';
+import type { PendingEvent, Room } from './room.js';
 
 const INTERVAL_MS = 1000 / TICK_RATE_HZ;
 const MAX_CATCH_UP = 5;
@@ -29,6 +29,13 @@ const MAX_CATCH_UP = 5;
  * Uses drift-corrected setInterval — no recursive setTimeout.
  */
 export function startLoop(room: Room): void {
+  // Guard against duplicate loops — clear any existing timer before starting
+  if (room.loopTimer) {
+    clearInterval(room.loopTimer);
+    room.loopTimer = null;
+    log.info('[loop] cleared stale timer before restart');
+  }
+
   let expectedTickAt = performance.now() + INTERVAL_MS;
 
   room.loopTimer = setInterval(() => {
@@ -47,7 +54,7 @@ export function startLoop(room: Room): void {
 
       if (scoreWinner) {
         log.info(`[loop] score win: ${scoreWinner} reaches ${SCORE_TO_WIN}`);
-        finishMatch(room, { endReason: "score", winnerSlot: scoreWinner });
+        finishMatch(room, { endReason: 'score', winnerSlot: scoreWinner });
         return;
       }
 
@@ -55,13 +62,17 @@ export function startLoop(room: Room): void {
       const afkResult = afkTracker.tick(phase);
       if (afkResult) {
         const io = getIO();
-        if (afkResult.type === "warning") {
-          const payload = { t: "afkWarning", slot: afkResult.slot, secondsRemaining: afkResult.secondsRemaining };
-          io.emit("afkWarning", payload);
-          io.of("/spectate").emit("afkWarning", payload);
-        } else if (afkResult.type === "forfeit") {
+        if (afkResult.type === 'warning') {
+          const payload = {
+            t: 'afkWarning',
+            slot: afkResult.slot,
+            secondsRemaining: afkResult.secondsRemaining,
+          };
+          io.emit('afkWarning', payload);
+          io.of('/spectate').emit('afkWarning', payload);
+        } else if (afkResult.type === 'forfeit') {
           log.info(`[loop] AFK forfeit: ${afkResult.afkSlot} idle → ${afkResult.winnerSlot} wins`);
-          finishMatch(room, { endReason: "forfeit_afk", winnerSlot: afkResult.winnerSlot });
+          finishMatch(room, { endReason: 'forfeit_afk', winnerSlot: afkResult.winnerSlot });
           return;
         }
       }
@@ -80,13 +91,11 @@ export function startLoop(room: Room): void {
 }
 
 function driveAiPaddle(room: Room, dt: number): void {
-  if (room.state.phase !== "playing") return;
+  if (room.state.phase !== 'playing') return;
 
   const slots = lobby.getSlots();
   const aiSlot: PlayerSlot | null =
-    slots.top === AI_USER_ID ? "top" :
-    slots.bottom === AI_USER_ID ? "bottom" :
-    null;
+    slots.top === AI_USER_ID ? 'top' : slots.bottom === AI_USER_ID ? 'bottom' : null;
   if (!aiSlot) return;
 
   const paddle = room.state.paddles[aiSlot];
@@ -109,7 +118,7 @@ export function stopLoop(room: Room): void {
   if (room.loopTimer) {
     clearInterval(room.loopTimer);
     room.loopTimer = null;
-    log.info("[loop] stopped");
+    log.info('[loop] stopped');
   }
 }
 

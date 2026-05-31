@@ -1,3 +1,4 @@
+import { PADDLE_HEIGHT, PADDLE_WIDTH } from '@pingpong/shared';
 /**
  * Paddle — rounded-rect paddle Graphics helper.
  *
@@ -6,8 +7,7 @@
  *
  * Pixi v8 chained Graphics API.
  */
-import { Graphics } from "pixi.js";
-import { PADDLE_WIDTH, PADDLE_HEIGHT } from "@pingpong/shared";
+import { Graphics } from 'pixi.js';
 
 /** Corner radius for the rounded rectangle. */
 const CORNER_RADIUS = 6;
@@ -20,18 +20,9 @@ export const PADDLE_COLOR_TOP = 0xff_7a_7a; // opponent
  * Create a single paddle Graphics, centred at (0, 0).
  * Caller positions it via `.x` / `.y`.
  */
-export function createPaddle(
-  label: string,
-  color: number,
-): Graphics {
+export function createPaddle(label: string, color: number): Graphics {
   const paddle = new Graphics()
-    .roundRect(
-      -PADDLE_WIDTH / 2,
-      -PADDLE_HEIGHT / 2,
-      PADDLE_WIDTH,
-      PADDLE_HEIGHT,
-      CORNER_RADIUS,
-    )
+    .roundRect(-PADDLE_WIDTH / 2, -PADDLE_HEIGHT / 2, PADDLE_WIDTH, PADDLE_HEIGHT, CORNER_RADIUS)
     .fill(color);
   paddle.label = label;
   return paddle;
@@ -39,13 +30,8 @@ export function createPaddle(
 
 /** Recolor a paddle in-place without changing its label or geometry. */
 export function recolorPaddle(paddle: Graphics, color: number): void {
-  paddle.clear()
-    .roundRect(
-      -PADDLE_WIDTH / 2,
-      -PADDLE_HEIGHT / 2,
-      PADDLE_WIDTH,
-      PADDLE_HEIGHT,
-      CORNER_RADIUS,
-    )
+  paddle
+    .clear()
+    .roundRect(-PADDLE_WIDTH / 2, -PADDLE_HEIGHT / 2, PADDLE_WIDTH, PADDLE_HEIGHT, CORNER_RADIUS)
     .fill(color);
 }

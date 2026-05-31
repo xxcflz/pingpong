@@ -20,9 +20,15 @@ const oauthRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const { code } = parsed.data;
-    const clientId = process.env.DISCORD_CLIENT_ID!;
-    const clientSecret = process.env.DISCORD_CLIENT_SECRET!;
+    const clientId = process.env.DISCORD_CLIENT_ID;
+    const clientSecret = process.env.DISCORD_CLIENT_SECRET;
     const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+
+    if (!clientId || !clientSecret) {
+      return reply
+        .code(500)
+        .send({ error: 'server_config', details: 'Missing Discord credentials' });
+    }
 
     try {
       const res = await fetch(`${DISCORD_API}/oauth2/token`, {

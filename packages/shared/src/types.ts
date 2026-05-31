@@ -14,17 +14,12 @@ export interface Vec2 {
 // ── Player slots ─────────────────────────────────────────────────────────────
 
 /** Which end of the court a player occupies. */
-export type PlayerSlot = "top" | "bottom";
+export type PlayerSlot = 'top' | 'bottom';
 
 // ── Match lifecycle ──────────────────────────────────────────────────────────
 
 /** High-level phase of a match. */
-export type MatchPhase =
-  | "waiting"
-  | "countdown"
-  | "playing"
-  | "paused"
-  | "finished";
+export type MatchPhase = 'waiting' | 'countdown' | 'playing' | 'paused' | 'finished';
 
 /**
  * Lobby state machine phases.
@@ -42,13 +37,7 @@ export type MatchPhase =
  *   paused    → ended       matchEnd
  *   ended     → idle        reset (prepare for next match)
  */
-export type LobbyPhase =
-  | "idle"
-  | "lobby"
-  | "countdown"
-  | "playing"
-  | "paused"
-  | "ended";
+export type LobbyPhase = 'idle' | 'lobby' | 'countdown' | 'playing' | 'paused' | 'ended';
 
 /**
  * Reason a match ended.
@@ -61,14 +50,14 @@ export type LobbyPhase =
  * - `server_shutdown`: server process ending
  */
 export type EndReason =
-  | "score"
-  | "forfeit"
-  | "forfeit_dc"
-  | "forfeit_afk"
-  | "forfeit_leave"
-  | "disconnect"
-  | "afk"
-  | "server_shutdown";
+  | 'score'
+  | 'forfeit'
+  | 'forfeit_dc'
+  | 'forfeit_afk'
+  | 'forfeit_leave'
+  | 'disconnect'
+  | 'afk'
+  | 'server_shutdown';
 
 // ── Game state snapshots ─────────────────────────────────────────────────────
 

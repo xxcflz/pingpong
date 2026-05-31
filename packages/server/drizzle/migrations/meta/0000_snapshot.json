@@ -90,17 +90,12 @@
       "indexes": {
         "matches_players_idx": {
           "name": "matches_players_idx",
-          "columns": [
-            "player_a_id",
-            "player_b_id"
-          ],
+          "columns": ["player_a_id", "player_b_id"],
           "isUnique": false
         },
         "matches_started_at_idx": {
           "name": "matches_started_at_idx",
-          "columns": [
-            "started_at"
-          ],
+          "columns": ["started_at"],
           "isUnique": false
         }
       },
@@ -109,12 +104,8 @@
           "name": "matches_player_a_id_users_id_fk",
           "tableFrom": "matches",
           "tableTo": "users",
-          "columnsFrom": [
-            "player_a_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_a_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -122,12 +113,8 @@
           "name": "matches_player_b_id_users_id_fk",
           "tableFrom": "matches",
           "tableTo": "users",
-          "columnsFrom": [
-            "player_b_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_b_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -135,12 +122,8 @@
           "name": "matches_winner_id_users_id_fk",
           "tableFrom": "matches",
           "tableTo": "users",
-          "columnsFrom": [
-            "winner_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["winner_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -198,9 +181,7 @@
       "indexes": {
         "users_discord_id_idx": {
           "name": "users_discord_id_idx",
-          "columns": [
-            "discord_id"
-          ],
+          "columns": ["discord_id"],
           "isUnique": true
         }
       },
