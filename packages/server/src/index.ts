@@ -40,7 +40,12 @@ await app.register(cookie, {
 
 // HTTP routes
 await app.register(oauthRoutes);
-await app.register(debugRoutes);
+// Debug routes expose unauthenticated state mutation (e.g. /api/_debug/reset
+// kills the live match). Never register them in production.
+if (process.env.NODE_ENV !== 'production') {
+  await app.register(debugRoutes);
+  log.warn('[http] debug routes enabled (NODE_ENV != production)');
+}
 await app.register(matchRoutes);
 
 // Health check

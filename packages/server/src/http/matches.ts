@@ -167,6 +167,12 @@ const matchRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(404).send({ error: 'user not found' });
     }
 
+    // Ownership: a caller may only read their own history. `authed.id` is the
+    // Discord ID from the validated token; match it against the row's discordId.
+    if (userRow.discordId !== authed.id) {
+      return reply.code(403).send({ error: 'forbidden' });
+    }
+
     const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 50);
     const rawMatches = listRecentMatchesForUser(db, userRow.id, limit);
 
@@ -195,6 +201,12 @@ const matchRoutes: FastifyPluginAsync = async (app) => {
 
     if (!matchRow) {
       return reply.code(404).send({ error: 'match not found' });
+    }
+
+    // Ownership: only the two participants may read a match by id.
+    const caller = db.select().from(users).where(eq(users.discordId, authed.id)).get() ?? null;
+    if (!caller || (caller.id !== matchRow.playerAId && caller.id !== matchRow.playerBId)) {
+      return reply.code(403).send({ error: 'forbidden' });
     }
 
     const summary = hydrateMatch(matchRow);

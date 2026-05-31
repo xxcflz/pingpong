@@ -1,3 +1,4 @@
+import type { MatchEndMessage } from '@pingpong/shared';
 import type { PlayerSlot, UserSummary } from '@pingpong/shared';
 import { db } from '../db/index.js';
 import { endMatch as endMatchRepo } from '../db/repos.js';
@@ -27,7 +28,7 @@ export function finishMatch(room: Room, opts: FinishOptions): void {
   const { endReason, winnerSlot } = opts;
 
   stopLoop(room);
-  room.endMatch(endReason, winnerSlot);
+  room.endMatch();
   lobby.matchEnd();
 
   let winnerId: number | null = null;
@@ -79,7 +80,7 @@ export function finishMatch(room: Room, opts: FinishOptions): void {
     scoreA: room.state.score.top,
     scoreB: room.state.score.bottom,
     rallyCountMax: room.rallyCountMax,
-  };
+  } satisfies MatchEndMessage;
 
   const io = getIO();
   io.emit('matchEnd', payload);

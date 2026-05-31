@@ -1,16 +1,23 @@
-console.warn('===== orchestrator.ts LOADED =====');
-
 import {
   BALL_RADIUS,
   COURT_HEIGHT,
   COURT_WIDTH,
-  type MatchPhase,
   type MatchState,
   PADDLE_HEIGHT,
   PADDLE_WIDTH,
   type PaddleMoveEvent,
   type PlayerSlot,
   type SpectatorState,
+} from '@pingpong/shared';
+import type {
+  AfkWarningMessage as ServerAfkWarning,
+  CountdownTickMessage as ServerCountdownTick,
+  LobbyUpdateMessage as ServerLobbyUpdate,
+  MatchEndMessage as ServerMatchEnd,
+  MatchStartMessage as ServerMatchStart,
+  PauseMessage as ServerPause,
+  ScoreMessage as ServerScoreEvent,
+  StateSnapshotMessage as ServerStateSnapshot,
 } from '@pingpong/shared';
 import { type Application, Container, Graphics, Text } from 'pixi.js';
 /**
@@ -60,77 +67,20 @@ declare global {
   }
 }
 
-// ── Wire protocol types (matching actual server payloads) ───────────────────
-
-interface ServerLobbyUpdate {
-  t: 'lobbyUpdate';
-  phase: string;
-  slots: { top?: string; bottom?: string };
-  paddleColors: Record<string, number>;
-  countdownRemaining: number;
-  readyUsers: string[];
-}
-
-interface ServerCountdownTick {
-  t: 'countdownTick';
-  remaining?: number;
-  number?: number;
-}
-
-interface ServerMatchStart {
-  t: 'matchStart';
-  matchId: string;
-  players: Record<PlayerSlot, { id: string; username: string; avatarUrl: string | null }>;
-}
-
-interface ServerStateSnapshot {
-  t: 'stateSnapshot';
-  tick: number;
-  lastProcessedSeq: Record<PlayerSlot, number>;
-  ball: MatchState['ball'];
-  paddles: MatchState['paddles'];
-  score: MatchState['score'];
-  phase: MatchPhase;
-  rallyCount: number;
-  ballSpeed: number;
-}
-
-interface ServerScoreEvent {
-  t: 'scoreEvent';
-  side: PlayerSlot;
-  score: Record<PlayerSlot, number>;
-  reason: string;
-}
-
-interface ServerMatchEnd {
-  t: 'matchEnd';
-  matchId: number | null;
-  end_reason: string;
-  winnerSlot: PlayerSlot | null;
-  winner: { id: string; username: string; avatarUrl: string | null } | null;
-  loser: { id: string; username: string; avatarUrl: string | null } | null;
-  scoreA: number;
-  scoreB: number;
-  rallyCountMax: number;
-}
-
-interface ServerPause {
-  t: 'pause';
-  reason: string;
-  userId?: string;
-}
-
-interface ServerAfkWarning {
-  t: 'afkWarning';
-  slot: PlayerSlot;
-  secondsRemaining: number;
-}
-
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
 const POLLING_INPUT_INTERVAL_MS = 16;
+
+/**
+ * Dev-only debug log. `import.meta.env.DEV` is statically replaced by Vite,
+ * so these calls are dead-code-eliminated from production builds and never
+ * spam the Discord client console.
+ */
+function dlog(...args: unknown[]): void {
+  if (import.meta.env.DEV) console.log(...args);
+}
 
 // ── Orchestrator ────────────────────────────────────────────────────────────
 
@@ -231,41 +181,41 @@ export class MatchOrchestrator {
   // ── Boot sequence ─────────────────────────────────────────────────────────
 
   async boot(): Promise<void> {
-    console.warn('[orchestrator] ===== BOOT STARTING =====');
+    dlog('[orchestrator] ===== BOOT STARTING =====');
 
     const params = new URLSearchParams(window.location.search);
     this.myUserId =
       params.get('test_user_id') ?? (this.ctx.isMock ? `mock_user_${Date.now()}` : null);
 
-    console.warn('[orchestrator] myUserId:', this.myUserId, 'isMock:', this.ctx.isMock);
+    dlog('[orchestrator] myUserId:', this.myUserId, 'isMock:', this.ctx.isMock);
 
     this.scene.setPhase('waiting');
 
     if (!this.ctx.isMock) {
-      console.warn('[orchestrator] Authorizing with Discord...');
+      dlog('[orchestrator] Authorizing with Discord...');
       await this.ctx.authorize(this.serverHost);
       this.myUserId = this.ctx.userId;
-      console.warn('[orchestrator] Discord authorized, userId:', this.myUserId);
+      dlog('[orchestrator] Discord authorized, userId:', this.myUserId);
     }
 
-    console.warn('[orchestrator] Creating socket...');
+    dlog('[orchestrator] Creating socket...');
     this.createSocket();
-    console.warn('[orchestrator] Subscribing to events...');
+    dlog('[orchestrator] Subscribing to events...');
     this.subscribeToEvents();
 
-    console.warn('[orchestrator] Waiting for connection...');
+    dlog('[orchestrator] Waiting for connection...');
     await this.waitForConnection();
-    console.warn('[orchestrator] Connected! Socket ID:', this.socket?.id);
+    dlog('[orchestrator] Connected! Socket ID:', this.socket?.id);
 
     if (this.socket) {
-      console.warn('[orchestrator] Emitting setPaddleColor:', this.userColor);
+      dlog('[orchestrator] Emitting setPaddleColor:', this.userColor);
       this.socket.emit('setPaddleColor', { color: this.userColor });
     }
 
-    console.warn('[orchestrator] Starting lobby heartbeat...');
+    dlog('[orchestrator] Starting lobby heartbeat...');
     this.startLobbyHeartbeat();
 
-    console.warn('[orchestrator] Starting lifecycle observer...');
+    dlog('[orchestrator] Starting lifecycle observer...');
     this.lifecycle = new LifecycleObserver(this.ctx);
     await this.lifecycle.start({
       onPause: () => {
@@ -282,7 +232,7 @@ export class MatchOrchestrator {
     });
 
     this.exposeTestHooks();
-    console.warn('[orchestrator] ===== BOOT COMPLETE =====');
+    dlog('[orchestrator] ===== BOOT COMPLETE =====');
   }
 
   // ── Socket connection ─────────────────────────────────────────────────────
@@ -296,6 +246,10 @@ export class MatchOrchestrator {
     if (this.ctx.accessToken) {
       auth.token = this.ctx.accessToken;
     }
+    // Discord Activity instance id — stable across all participants in this
+    // launch. The server persists it on the match row so history is keyed to
+    // the real instance instead of a random per-match UUID.
+    auth.instanceId = this.ctx.instanceId;
 
     const forcePolling = !this.ctx.isMock && SOCKET_TRANSPORT === 'polling';
     this.socket = io(this.serverHost, {
@@ -388,12 +342,12 @@ export class MatchOrchestrator {
   // ── Role determination ────────────────────────────────────────────────────
 
   private onLobbyUpdate(data: ServerLobbyUpdate): void {
-    console.warn('[orchestrator] onLobbyUpdate:', data);
+    dlog('[orchestrator] onLobbyUpdate:', data);
     const { phase, slots, paddleColors } = data;
 
     // Don't override phase to 'idle' during active match
     if (phase === 'idle' && this.currentPhase === 'playing') {
-      console.warn('[orchestrator] Ignoring idle phase during active match');
+      dlog('[orchestrator] Ignoring idle phase during active match');
       return;
     }
 
@@ -420,15 +374,15 @@ export class MatchOrchestrator {
 
     if (this.role === 'pending') {
       const occupiedSlots = [slots.top, slots.bottom].filter(Boolean).length;
-      console.warn('[orchestrator] role=pending, occupiedSlots:', occupiedSlots, 'phase:', phase);
+      dlog('[orchestrator] role=pending, occupiedSlots:', occupiedSlots, 'phase:', phase);
       if (
         occupiedSlots >= 2 &&
         (phase === 'playing' || phase === 'countdown' || phase === 'paused')
       ) {
-        console.warn('[orchestrator] becoming spectator');
+        dlog('[orchestrator] becoming spectator');
         this.becomeSpectator();
       } else {
-        console.warn('[orchestrator] becoming player candidate');
+        dlog('[orchestrator] becoming player candidate');
         this.becomePlayerCandidate();
       }
     }
@@ -452,7 +406,7 @@ export class MatchOrchestrator {
   }
 
   private becomePlayerCandidate(): void {
-    console.warn('[orchestrator] becomePlayerCandidate called, selectedMode:', this.selectedMode);
+    dlog('[orchestrator] becomePlayerCandidate called, selectedMode:', this.selectedMode);
     this.role = 'player';
     this.scene.setRole('player');
     if (this.selectedMode !== 'ai') {
@@ -469,17 +423,17 @@ export class MatchOrchestrator {
     });
     this.ballPrediction = createBallPredictionEngine();
     this.opponentPrediction = createOpponentPredictionEngine(COURT_WIDTH / 2);
-    console.warn('[orchestrator] prediction engines created:', {
+    dlog('[orchestrator] prediction engines created:', {
       prediction: !!this.prediction,
       ballPrediction: !!this.ballPrediction,
       opponentPrediction: !!this.opponentPrediction,
     });
 
     if (this.selectedMode) {
-      console.warn('[orchestrator] emitting selected mode:', this.selectedMode);
+      dlog('[orchestrator] emitting selected mode:', this.selectedMode);
       this.emitSelectedMode();
     } else {
-      console.warn('[orchestrator] showing ready button');
+      dlog('[orchestrator] showing ready button');
       this.showReadyButton();
     }
   }
@@ -741,13 +695,13 @@ export class MatchOrchestrator {
   private onCountdownTick(data: ServerCountdownTick): void {
     this.currentPhase = 'countdown';
     this.scene.setPhase('countdown');
-    this.scene.setCountdown(data.remaining ?? data.number ?? 0);
+    this.scene.setCountdown(data.remaining ?? 0);
   }
 
   // ── Match start ───────────────────────────────────────────────────────────
 
   private onMatchStart(data: ServerMatchStart): void {
-    console.log('[orchestrator] matchStart received:', data);
+    dlog('[orchestrator] matchStart received:', data);
     this.currentPhase = 'playing';
     this.scene.setPhase('playing');
     this.scene.setCountdown(0);
@@ -757,13 +711,17 @@ export class MatchOrchestrator {
       if (data.players.top.id === this.myUserId) {
         this.mySlot = 'top';
         this.scene.setUserSlot('top');
-        console.log('[orchestrator] assigned to top slot');
+        dlog('[orchestrator] assigned to top slot');
       } else if (data.players.bottom.id === this.myUserId) {
         this.mySlot = 'bottom';
         this.scene.setUserSlot('bottom');
-        console.log('[orchestrator] assigned to bottom slot');
+        dlog('[orchestrator] assigned to bottom slot');
       } else {
-        console.warn('[orchestrator] myUserId not found in matchStart players:', this.myUserId, data.players);
+        console.warn(
+          '[orchestrator] myUserId not found in matchStart players:',
+          this.myUserId,
+          data.players,
+        );
       }
     } else {
       console.warn('[orchestrator] myUserId is null when matchStart received');
@@ -777,16 +735,16 @@ export class MatchOrchestrator {
         spin: 0,
         radius: BALL_RADIUS,
       });
-      console.log('[orchestrator] ball prediction reset');
+      dlog('[orchestrator] ball prediction reset');
     }
 
     // Wire drag handler
     this.setupDragHandler();
-    console.log('[orchestrator] drag handler setup');
+    dlog('[orchestrator] drag handler setup');
 
     // Start Pixi ticker for prediction+interpolation
     this.app.ticker.add(this.boundTick);
-    console.log('[orchestrator] ticker added, prediction engines:', {
+    dlog('[orchestrator] ticker added, prediction engines:', {
       prediction: !!this.prediction,
       ballPrediction: !!this.ballPrediction,
       opponentPrediction: !!this.opponentPrediction,
@@ -877,14 +835,14 @@ export class MatchOrchestrator {
   private onTick(ticker: { deltaMS: number }): void {
     if (this.role !== 'player' || this.currentPhase !== 'playing') {
       if (this.tickCount === 0) {
-        console.log('[orchestrator] onTick skipped - role:', this.role, 'phase:', this.currentPhase);
+        dlog('[orchestrator] onTick skipped - role:', this.role, 'phase:', this.currentPhase);
       }
       return;
     }
 
     if (!this.prediction || !this.opponentPrediction || !this.mySlot || !this.ballPrediction) {
       if (this.tickCount === 0) {
-        console.log('[orchestrator] onTick skipped - missing engines:', {
+        dlog('[orchestrator] onTick skipped - missing engines:', {
           prediction: !!this.prediction,
           opponentPrediction: !!this.opponentPrediction,
           mySlot: this.mySlot,
@@ -896,7 +854,7 @@ export class MatchOrchestrator {
 
     this.tickCount++;
     if (this.tickCount <= 3 || this.tickCount % 60 === 0) {
-      console.log(`[orchestrator] onTick #${this.tickCount}, dt=${ticker.deltaMS.toFixed(2)}ms`);
+      dlog(`[orchestrator] onTick #${this.tickCount}, dt=${ticker.deltaMS.toFixed(2)}ms`);
     }
 
     // Advance predictions using frame dt

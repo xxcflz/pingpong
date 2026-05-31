@@ -29,6 +29,15 @@ export class DiscordContext {
     return this._userId;
   }
 
+  /**
+   * The Discord Activity instance id — stable across all participants in the
+   * same Activity launch (the mock SDK returns a fixed id). Sent in the socket
+   * handshake so the server can scope/persist per instance.
+   */
+  get instanceId(): string {
+    return this.sdk.instanceId;
+  }
+
   private constructor(sdk: IDiscordSDK, isMock: boolean) {
     this.sdk = sdk;
     this.isMock = isMock;

@@ -1,16 +1,53 @@
 /**
- * Event schemas — discriminated unions for all wire messages.
+ * Wire protocol — the ACTUAL event names and payload shapes exchanged over
+ * Socket.IO between client and server.
  *
- * Every event carries a `t` discriminant field for exhaustive switch handling.
- * These are plain data contracts; no Socket.IO or Discord types leak here.
+ * This file is the single source of truth for the protocol. Both ends are
+ * checked against it:
+ *   - the client imports these payload types instead of re-declaring them
+ *   - the server annotates its emit literals with `satisfies <Message>`
+ * so any drift between the three breaks the build.
+ *
+ * Event-name → payload mapping (Socket.IO event name in quotes):
+ *
+ *   Client → Server
+ *     'paddleInput'      PaddleInputMessage
+ *     'setPaddleColor'   SetPaddleColorMessage
+ *     'readyToggle'      (no payload)
+ *     'playAi'           (no payload)
+ *     'leaveLobby'       (no payload)
+ *     'leaveGame'        (no payload)
+ *     'requestRematch'   (no payload)
+ *     'lobby_heartbeat'  (no payload)
+ *     'pause'            (no payload)
+ *     'resume'           (no payload)
+ *     'request_resync'   (no payload)
+ *
+ *   Server → Player
+ *     'lobbyUpdate'      LobbyUpdateMessage
+ *     'countdownTick'    CountdownTickMessage
+ *     'matchStart'       MatchStartMessage
+ *     'stateSnapshot'    StateSnapshotMessage
+ *     'scoreEvent'       ScoreMessage
+ *     'matchEnd'         MatchEndMessage
+ *     'pause'            PauseMessage
+ *     'resume'           ResumeMessage
+ *     'afkWarning'       AfkWarningMessage
+ *     'rematchPending'   RematchPendingMessage
+ *     'error'            ErrorMessage
+ *
+ *   Server → Spectator (/spectate namespace)
+ *     'SpectatorState'   SpectatorState (slim, see types.ts)
+ *     'SpectatorScore'   SpectatorScoreMessage
+ *     'SpectatorEnd'     SpectatorEndMessage
+ *     'Error'            ErrorMessage
  */
 
 import type {
+  BallState,
   LobbyPhase,
-  LobbyState,
   MatchPhase,
-  MatchState,
-  MatchSummary,
+  PaddleState,
   PlayerSlot,
   UserSummary,
   Vec2,
@@ -18,7 +55,10 @@ import type {
 
 // ── Client → Server ─────────────────────────────────────────────────────────
 
-/** Paddle position update from a player client. */
+/**
+ * Client-internal paddle input representation produced by the prediction
+ * engine. Flattened to {@link PaddleInputMessage} before it goes on the wire.
+ */
 export interface PaddleMoveEvent {
   readonly t: 'paddle_move';
   readonly pos: Vec2;
@@ -26,204 +66,140 @@ export interface PaddleMoveEvent {
   readonly seq: number;
 }
 
-/** Player requests to join the match lobby. */
-export interface JoinEvent {
-  readonly t: 'join';
-  readonly matchId: string;
+/** Wire payload for the 'paddleInput' event. */
+export interface PaddleInputMessage {
+  readonly paddleX: number;
+  readonly seq: number;
 }
 
-/** Player requests to spectate. */
-export interface SpectateEvent {
-  readonly t: 'spectate';
-  readonly matchId: string;
+/** Wire payload for the 'setPaddleColor' event. */
+export interface SetPaddleColorMessage {
+  readonly color: number;
 }
-
-/** Player signals they are still active (anti-AFK heartbeat). */
-export interface HeartbeatEvent {
-  readonly t: 'heartbeat';
-}
-
-/** Player acknowledges a server reconciliation correction. */
-export interface ReconcileAckEvent {
-  readonly t: 'reconcile_ack';
-  readonly ackTick: number;
-}
-
-/** Player signals they are pausing (tab hidden / PIP entered). */
-export interface PauseEvent {
-  readonly t: 'pause';
-}
-
-/** Player signals they are resuming (tab visible / PIP exited). */
-export interface ResumeEvent {
-  readonly t: 'resume';
-}
-
-/** Player requests a fresh state snapshot after resuming. */
-export interface RequestResyncEvent {
-  readonly t: 'request_resync';
-}
-
-/** Player toggles ready — claims first empty slot or receives LOBBY_FULL. */
-export interface ReadyToggleEvent {
-  readonly t: 'readyToggle';
-}
-
-/** Player starts a solo match against the server-controlled AI. */
-export interface PlayAiEvent {
-  readonly t: 'playAi';
-}
-
-/** Player voluntarily leaves the lobby. */
-export interface LeaveLobbyEvent {
-  readonly t: 'leaveLobby';
-}
-
-/** Player heartbeat to prove they are still connected. */
-export interface LobbyHeartbeatEvent {
-  readonly t: 'lobby_heartbeat';
-}
-
-/** Union of all client-to-server events. */
-export type ClientToServerEvent =
-  | PaddleMoveEvent
-  | JoinEvent
-  | SpectateEvent
-  | HeartbeatEvent
-  | ReconcileAckEvent
-  | PauseEvent
-  | ResumeEvent
-  | RequestResyncEvent
-  | ReadyToggleEvent
-  | PlayAiEvent
-  | LeaveLobbyEvent
-  | LobbyHeartbeatEvent;
 
 // ── Server → Player ─────────────────────────────────────────────────────────
 
-/** Full state snapshot sent at BROADCAST_HZ_PLAYER. */
-export interface StateSnapshotEvent {
-  readonly t: 'state';
-  readonly state: MatchState;
-  /** Highest input seq the server has processed for this player. */
-  readonly lastProcessedSeq: number;
+/** Slot → occupying user's Discord id (absent when empty). */
+export interface SlotOccupancy {
+  readonly top?: string;
+  readonly bottom?: string;
 }
 
-/** Server reconciliation: authoritative paddle correction. */
-export interface PaddleCorrectionEvent {
-  readonly t: 'paddle_correction';
-  readonly slot: PlayerSlot;
-  readonly pos: Vec2;
-  readonly ackTick: number;
-}
-
-/** Match phase transition. */
-export interface PhaseChangeEvent {
-  readonly t: 'phase';
-  readonly phase: MatchPhase;
-  readonly countdownMs?: number;
-}
-
-/** Score update after a point. */
-export interface ScoreEvent {
-  readonly t: 'score';
-  readonly scorer: PlayerSlot;
-  readonly score: Readonly<Record<PlayerSlot, number>>;
-}
-
-/** Match ended. */
-export interface MatchEndEvent {
-  readonly t: 'match_end';
-  readonly summary: MatchSummary;
-}
-
-/** Lobby state update (player join/leave, spectator changes). */
-export interface LobbyUpdateEvent {
-  readonly t: 'lobby';
-  readonly lobby: LobbyState;
-}
-
-/** Server error / rejection. */
-export interface ErrorEvent {
-  readonly t: 'error';
-  readonly code: string;
-  readonly message: string;
-}
-
-/** Server confirms match paused (player disconnect or client-side pause). */
-export interface PauseBroadcastEvent {
-  readonly t: 'pause';
-  readonly reason: 'player_disconnect' | 'pip' | 'visibility';
-  readonly userId?: string;
-}
-
-/** Server confirms match resumed after pause. */
-export interface ResumeBroadcastEvent {
-  readonly t: 'resume';
-}
-
-/** Lobby state broadcast — emitted on every phase/slot/ready change. */
-export interface LobbyUpdateBroadcastEvent {
+/** Lobby state broadcast — emitted on every phase/slot/ready/color change. */
+export interface LobbyUpdateMessage {
   readonly t: 'lobbyUpdate';
-  readonly phase: LobbyPhase;
-  readonly slots: { readonly top?: string; readonly bottom?: string };
+  readonly phase: LobbyPhase | string;
+  readonly slots: SlotOccupancy;
+  readonly paddleColors: Readonly<Record<string, number>>;
   readonly countdownRemaining: number;
   readonly readyUsers: readonly string[];
 }
 
-/** Countdown tick — emitted at 1 Hz during the 3-second countdown. */
-export interface CountdownTickEvent {
+/** Countdown tick — emitted at 1 Hz during the pre-match countdown. */
+export interface CountdownTickMessage {
   readonly t: 'countdownTick';
   readonly remaining: number;
 }
 
-/** Match started — broadcast when countdown completes. */
-export interface MatchStartEvent {
+/** Match started — broadcast when the countdown completes. */
+export interface MatchStartMessage {
   readonly t: 'matchStart';
   readonly matchId: string;
   readonly players: Readonly<Record<PlayerSlot, UserSummary>>;
 }
 
-/** AFK warning — emitted at 1 Hz when a player exceeds AFK_WARN_MS idle. */
-export interface AfkWarningEvent {
+/** Authoritative state snapshot — emitted at the player broadcast rate. */
+export interface StateSnapshotMessage {
+  readonly t: 'stateSnapshot';
+  readonly tick: number;
+  readonly lastProcessedSeq: Readonly<Record<PlayerSlot, number>>;
+  readonly ball: BallState;
+  readonly paddles: Readonly<Record<PlayerSlot, PaddleState>>;
+  readonly score: Readonly<Record<PlayerSlot, number>>;
+  readonly phase: MatchPhase;
+  readonly rallyCount: number;
+  readonly ballSpeed: number;
+}
+
+/** Score update after a point. */
+export interface ScoreMessage {
+  readonly t: 'scoreEvent';
+  readonly side: PlayerSlot;
+  readonly score: Readonly<Record<PlayerSlot, number>>;
+  readonly reason: string;
+}
+
+/** Match ended — carries persisted summary fields for the end screen. */
+export interface MatchEndMessage {
+  readonly t: 'matchEnd';
+  readonly matchId: number | null;
+  readonly end_reason: string;
+  readonly winnerSlot: PlayerSlot | null;
+  readonly winner: UserSummary | null;
+  readonly loser: UserSummary | null;
+  readonly scoreA: number;
+  readonly scoreB: number;
+  readonly rallyCountMax: number;
+}
+
+/** Server confirms match paused (player disconnect or client-side pause). */
+export interface PauseMessage {
+  readonly t: 'pause';
+  readonly reason: string;
+  readonly userId?: string;
+}
+
+/** Server confirms match resumed after pause. */
+export interface ResumeMessage {
+  readonly t: 'resume';
+}
+
+/** AFK warning — emitted at 1 Hz when a player exceeds the idle warn threshold. */
+export interface AfkWarningMessage {
   readonly t: 'afkWarning';
   readonly slot: PlayerSlot;
   readonly secondsRemaining: number;
 }
 
-/** Union of all server-to-player events. */
-export type ServerToPlayerEvent =
-  | StateSnapshotEvent
-  | PaddleCorrectionEvent
-  | PhaseChangeEvent
-  | ScoreEvent
-  | MatchEndEvent
-  | LobbyUpdateEvent
-  | ErrorEvent
-  | PauseBroadcastEvent
-  | ResumeBroadcastEvent
-  | LobbyUpdateBroadcastEvent
-  | CountdownTickEvent
-  | MatchStartEvent
-  | AfkWarningEvent;
-
-// ── Server → Spectator ──────────────────────────────────────────────────────
-
-export interface SpectatorStateEvent {
-  readonly t: 'SpectatorState';
-  readonly state: MatchState;
+/** Rematch acknowledgement while waiting for the opponent to accept. */
+export interface RematchPendingMessage {
+  readonly t: 'rematchPending';
+  readonly message: string;
 }
 
-export interface SpectatorScoreEvent {
+/** Server error / rejection. */
+export interface ErrorMessage {
+  readonly t: 'error';
+  readonly code: string;
+  readonly message: string;
+}
+
+/** Discriminated union of every server→player message (exhaustive `t` switch). */
+export type ServerToPlayerMessage =
+  | LobbyUpdateMessage
+  | CountdownTickMessage
+  | MatchStartMessage
+  | StateSnapshotMessage
+  | ScoreMessage
+  | MatchEndMessage
+  | PauseMessage
+  | ResumeMessage
+  | AfkWarningMessage
+  | RematchPendingMessage
+  | ErrorMessage;
+
+// ── Server → Spectator (/spectate namespace) ─────────────────────────────────
+
+/** Spectator score update. */
+export interface SpectatorScoreMessage {
   readonly t: 'SpectatorScore';
   readonly score: Readonly<Record<PlayerSlot, number>>;
   readonly scorer: PlayerSlot;
 }
 
-export interface SpectatorEndEvent {
+/** Spectator match-end notification. */
+export interface SpectatorEndMessage {
   readonly t: 'SpectatorEnd';
   readonly winner: PlayerSlot;
   readonly score: Readonly<Record<PlayerSlot, number>>;
 }
-
-export type ServerToSpectatorEvent = SpectatorStateEvent | SpectatorScoreEvent | SpectatorEndEvent;

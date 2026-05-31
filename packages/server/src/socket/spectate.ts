@@ -1,4 +1,11 @@
-import type { MatchPhase, MatchState, PlayerSlot, SpectatorState } from '@pingpong/shared';
+import type {
+  MatchPhase,
+  MatchState,
+  PlayerSlot,
+  SpectatorEndMessage,
+  SpectatorScoreMessage,
+  SpectatorState,
+} from '@pingpong/shared';
 import type { Socket, Server as SocketServer } from 'socket.io';
 import { room } from '../game/room.js';
 import { authenticateSocket } from '../lobby/auth.js';
@@ -31,6 +38,13 @@ function projectToSpectatorState(s: MatchState): SpectatorState {
 function broadcastSpectatorState(): void {
   if (!spectatorNsp) return;
 
+  // Skip all work when no spectators are connected. The 15 Hz timer would
+  // otherwise project + emit state forever even on an idle "waiting" lobby.
+  // When a spectator joins, the connection handler sends an immediate snapshot
+  // and subsequent ticks resume here.
+  const audience = spectatorNsp.adapter.rooms.get(INSTANCE_ROOM);
+  if (!audience || audience.size === 0) return;
+
   const state = room.state;
   const payload = projectToSpectatorState(state);
   spectatorNsp.to(INSTANCE_ROOM).emit('SpectatorState', payload);
@@ -43,7 +57,7 @@ function broadcastSpectatorState(): void {
       t: 'SpectatorScore',
       score: state.score,
       scorer,
-    });
+    } satisfies SpectatorScoreMessage);
   }
 
   if (state.phase === 'finished' && lastPhase !== 'finished') {
@@ -52,7 +66,7 @@ function broadcastSpectatorState(): void {
       t: 'SpectatorEnd',
       winner: state.score.top > state.score.bottom ? 'top' : 'bottom',
       score: state.score,
-    });
+    } satisfies SpectatorEndMessage);
   }
 }
 

@@ -141,7 +141,7 @@ async function main(): Promise<void> {
       // Exit to lobby button: leave game and hide menu
       hmrOrchestrator?.leaveGame();
       hmrScene?.hidePauseMenu();
-    }
+    },
   );
 
   await hmrOrchestrator.boot();

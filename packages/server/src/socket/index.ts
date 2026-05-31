@@ -1,6 +1,11 @@
 import crypto from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
-import type { PlayerSlot } from '@pingpong/shared';
+import type {
+  CountdownTickMessage,
+  LobbyUpdateMessage,
+  MatchStartMessage,
+  PlayerSlot,
+} from '@pingpong/shared';
 import { Server, type Socket } from 'socket.io';
 import { db } from '../db/index.js';
 import { createMatch, upsertUserByDiscordId } from '../db/repos.js';
@@ -22,6 +27,20 @@ import { attachSpectateNamespace } from './spectate.js';
 
 let io: Server | undefined;
 
+/**
+ * Discord Activity instance id from the most recent connecting socket.
+ * Persisted on the match row so history is keyed to the real Activity instance
+ * rather than a random per-match UUID. The server still hosts one active match
+ * at a time; this captures the correct identifier for the eventual multi-room
+ * refactor without changing concurrency today.
+ */
+let currentInstanceId: string | null = null;
+
+function readInstanceId(socket: Socket): void {
+  const id = socket.handshake.auth?.instanceId as string | undefined;
+  if (id) currentInstanceId = id;
+}
+
 export function attachSocket(httpServer: HttpServer, clientOrigin: string): Server {
   io = new Server(httpServer, {
     path: '/ws',
@@ -39,12 +58,16 @@ export function attachSocket(httpServer: HttpServer, clientOrigin: string): Serv
         t: 'lobbyUpdate',
         phase: snapshot.phase,
         slots: snapshot.slots,
+        paddleColors: snapshot.paddleColors,
         countdownRemaining: snapshot.countdownRemaining,
         readyUsers: snapshot.readyUsers,
-      });
+      } satisfies LobbyUpdateMessage);
     },
     onCountdownTick: (remaining) => {
-      io?.emit('countdownTick', { t: 'countdownTick', remaining });
+      io?.emit('countdownTick', {
+        t: 'countdownTick',
+        remaining,
+      } satisfies CountdownTickMessage);
     },
     onCountdownComplete: (topDiscordId, bottomDiscordId) => {
       cancelPendingResets();
@@ -58,9 +81,11 @@ export function attachSocket(httpServer: HttpServer, clientOrigin: string): Serv
           bottomDiscordId === AI_USER_ID ? AI_USERNAME : `player_${bottomDiscordId.slice(0, 8)}`,
       });
 
+      // Client-facing match identifier (emitted in matchStart). Distinct from
+      // the Discord Activity instance id persisted below.
       const matchId = crypto.randomUUID();
       const matchRow = createMatch(db, {
-        instanceId: matchId,
+        instanceId: currentInstanceId ?? matchId,
         playerAId: topUser.id,
         playerBId: bottomUser.id,
       });
@@ -94,7 +119,7 @@ export function attachSocket(httpServer: HttpServer, clientOrigin: string): Serv
             avatarUrl: bottomUser.avatar,
           },
         },
-      });
+      } satisfies MatchStartMessage);
 
       log.info(`[ws] match started: ${matchId}`);
     },
@@ -114,6 +139,7 @@ export function attachSocket(httpServer: HttpServer, clientOrigin: string): Serv
 
   io.on('connection', async (socket) => {
     log.info(`[ws] client connected: ${socket.id}`);
+    readInstanceId(socket);
 
     // T8 compatibility: keep claim shortcut when NODE_ENV === 'test'
     if (process.env.NODE_ENV === 'test') {
@@ -394,7 +420,7 @@ function broadcastLobbyUpdate(): void {
     paddleColors: snapshot.paddleColors,
     countdownRemaining: lobby.getCountdownRemaining(),
     readyUsers: lobby.getReadyUsers(),
-  });
+  } satisfies LobbyUpdateMessage);
 }
 
 function handlePlayerDisconnect(

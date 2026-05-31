@@ -1,4 +1,3 @@
-export { createSocket, type TypedSocket, type SocketOpts } from './socket.js';
 export {
   createPredictionEngine,
   type PredictionEngine,

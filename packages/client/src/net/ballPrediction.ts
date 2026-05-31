@@ -26,8 +26,12 @@ import {
 /** Maximum correction distance before snapping (instead of blending). */
 const MAX_CORRECTION_PX = 80;
 
-/** Frames over which to blend a correction. */
-const CORRECTION_BLEND_FRAMES = 2;
+/**
+ * Time constant (seconds) for visual error decay. The rendered ball converges
+ * to the authoritative position over roughly 2–3× this duration. Time-based
+ * (not frame-based) so the convergence speed is identical at 60 fps or 250 fps.
+ */
+const ERROR_DECAY_TAU = 0.05;
 
 export interface BallPredictionEngine {
   /** Advance the prediction by one frame (dt seconds). */
@@ -47,6 +51,8 @@ export interface BallPredictionEngine {
 }
 
 export function createBallPredictionEngine(): BallPredictionEngine {
+  // Authoritative simulation track. Always advanced by physics and snapped to
+  // the server on every snapshot, so it never diverges into a competing ball.
   let predicted: BallState = {
     pos: { x: COURT_WIDTH / 2, y: COURT_HEIGHT / 2 },
     vel: { x: 0, y: BALL_SPEED_INITIAL },
@@ -54,11 +60,12 @@ export function createBallPredictionEngine(): BallPredictionEngine {
     radius: BALL_RADIUS,
   };
 
-  // Correction blending state
-  let correctionActive = false;
-  let correctionFrom: Vec2 = { x: 0, y: 0 };
-  let correctionTo: Vec2 = { x: 0, y: 0 };
-  let correctionFrame = 0;
+  // Visual error: renderedPos = predicted.pos + posError. Seeded on each
+  // snapshot to preserve on-screen continuity, then decayed toward zero. This
+  // replaces the old 2-frame output blend, which left `predicted` on its own
+  // track and caused the ball to oscillate between the predicted (leading) and
+  // server (trailing) positions every snapshot — the "ghost that follows".
+  let posError: Vec2 = { x: 0, y: 0 };
 
   function tick(dt: number, paddles: { top: PaddleState; bottom: PaddleState }): void {
     // 1. Apply Magnus effect
@@ -93,66 +100,48 @@ export function createBallPredictionEngine(): BallPredictionEngine {
     ball = collideWalls(ball);
 
     predicted = ball;
+
+    // Decay the visual error toward zero (frame-rate independent).
+    const decay = Math.exp(-dt / ERROR_DECAY_TAU);
+    posError = { x: posError.x * decay, y: posError.y * decay };
   }
 
   function onSnapshot(serverBall: BallState): void {
-    const dx = predicted.pos.x - serverBall.pos.x;
-    const dy = predicted.pos.y - serverBall.pos.y;
+    // Current on-screen position = authoritative track + visual error.
+    const renderedX = predicted.pos.x + posError.x;
+    const renderedY = predicted.pos.y + posError.y;
+
+    const dx = renderedX - serverBall.pos.x;
+    const dy = renderedY - serverBall.pos.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
     if (distance > MAX_CORRECTION_PX) {
-      // Large divergence: snap immediately
+      // Large divergence: snap immediately, no visual carry-over.
       predicted = { ...serverBall };
-      correctionActive = false;
-    } else if (distance > 1) {
-      // Small divergence: blend over several frames
-      correctionFrom = { ...predicted.pos };
-      correctionTo = { ...serverBall.pos };
-      correctionFrame = 0;
-      correctionActive = true;
-
-      // Also update velocity and spin from server (these are harder to predict)
-      predicted = {
-        ...serverBall,
-        pos: predicted.pos, // Keep current position, blend it below
-      };
-    } else {
-      // Perfect match
-      predicted = { ...serverBall };
-      correctionActive = false;
+      posError = { x: 0, y: 0 };
+      return;
     }
+
+    // Adopt the server's authoritative pos/vel/spin as the simulation track,
+    // and carry the (small) on-screen discrepancy as a decaying offset so the
+    // rendered ball stays continuous instead of snapping.
+    predicted = { ...serverBall };
+    posError = { x: renderedX - serverBall.pos.x, y: renderedY - serverBall.pos.y };
   }
 
   function getPredictedBall(): BallState {
-    if (!correctionActive) {
+    if (posError.x === 0 && posError.y === 0) {
       return predicted;
     }
-
-    correctionFrame++;
-    const t = Math.min(correctionFrame / CORRECTION_BLEND_FRAMES, 1);
-
-    if (t >= 1) {
-      correctionActive = false;
-      return {
-        ...predicted,
-        pos: correctionTo,
-      };
-    }
-
-    // Cubic ease-out for smooth correction
-    const eased = 1 - (1 - t) * (1 - t) * (1 - t);
-    const blendedX = correctionFrom.x + (correctionTo.x - correctionFrom.x) * eased;
-    const blendedY = correctionFrom.y + (correctionTo.y - correctionFrom.y) * eased;
-
     return {
       ...predicted,
-      pos: { x: blendedX, y: blendedY },
+      pos: { x: predicted.pos.x + posError.x, y: predicted.pos.y + posError.y },
     };
   }
 
   function reset(ball: BallState): void {
     predicted = { ...ball };
-    correctionActive = false;
+    posError = { x: 0, y: 0 };
   }
 
   function checkScore(): 'top' | 'bottom' | null {

@@ -13,7 +13,6 @@ import {
   type BallState,
   COURT_HEIGHT,
   COURT_WIDTH,
-  type EndReason,
   type MatchState,
   PADDLE_HEIGHT,
   PADDLE_MAX_SPEED,
@@ -21,6 +20,8 @@ import {
   type PaddleState,
   type PlayerSlot,
   SCORE_TO_WIN,
+  type ScoreMessage,
+  type StateSnapshotMessage,
   TICK_RATE_HZ,
   accelerateOnRally,
   applyMagnus,
@@ -197,26 +198,16 @@ export class Room {
   }
 
   /**
-   * End the match and emit MatchEnd event.
-   * Loop should be stopped by the caller before or after this.
+   * Transition the match to the 'finished' phase.
+   *
+   * Does NOT emit a matchEnd event — finish.ts owns that broadcast (it has the
+   * DB row, player summaries, and reset scheduling). This only flips the phase
+   * so the tick loop and broadcasters stop treating the match as live.
    */
-  endMatch(reason: EndReason, winner?: PlayerSlot): void {
+  endMatch(): void {
     if (this.state.phase === 'finished') return;
 
     this.state = { ...this.state, phase: 'finished', serverTimeMs: Date.now() };
-
-    const winnerSide = winner ?? 'top';
-    this.pendingEvents.push({
-      name: 'matchEnd',
-      data: {
-        t: 'matchEnd',
-        winnerSide,
-        scoreA: this.state.score.top,
-        scoreB: this.state.score.bottom,
-        end_reason: reason,
-        rallyCountMax: this.rallyCountMax,
-      },
-    });
   }
 
   /** Full reset to waiting state — used by debug endpoint for clean test isolation. */
@@ -295,11 +286,18 @@ export class Room {
 
         const currentPaddle = this.state.paddles[slot];
         if (!currentPaddle) continue;
-        const updated = clampPaddle({
+        const moved = clampPaddle({
           ...currentPaddle,
           pos: { x: nextX, y: currentPaddle.pos.y },
-          vel: { x: 0, y: 0 },
+          vel: currentPaddle.vel,
         });
+        // Derive horizontal velocity from the actual (clamped) displacement so
+        // the paddle collision step below imparts spin based on real motion.
+        // Previously this was zeroed here and only recomputed in step 6 (after
+        // collision), so spin depended on whether input landed on the exact
+        // collision tick. Step 6 recomputes the identical value for snapshots.
+        const inputVelX = (moved.pos.x - prevX) / dt;
+        const updated = { ...moved, vel: { x: inputVelX, y: 0 } };
         this.state = {
           ...this.state,
           paddles: { ...this.state.paddles, [slot]: updated },
@@ -356,7 +354,12 @@ export class Room {
       };
       this.pendingEvents.push({
         name: 'scoreEvent',
-        data: { t: 'scoreEvent', side: 'top', score: newScore, reason: 'goal' },
+        data: {
+          t: 'scoreEvent',
+          side: 'top',
+          score: newScore,
+          reason: 'goal',
+        } satisfies ScoreMessage,
       });
       if (newScore.top >= SCORE_TO_WIN) {
         return 'top';
@@ -375,7 +378,12 @@ export class Room {
       };
       this.pendingEvents.push({
         name: 'scoreEvent',
-        data: { t: 'scoreEvent', side: 'bottom', score: newScore, reason: 'goal' },
+        data: {
+          t: 'scoreEvent',
+          side: 'bottom',
+          score: newScore,
+          reason: 'goal',
+        } satisfies ScoreMessage,
       });
       if (newScore.bottom >= SCORE_TO_WIN) {
         return 'bottom';
@@ -428,7 +436,7 @@ export class Room {
           phase: this.state.phase,
           rallyCount: this.rallyCount,
           ballSpeed,
-        },
+        } satisfies StateSnapshotMessage,
       });
     }
 
